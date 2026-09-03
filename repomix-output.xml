@@ -1,0 +1,4362 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+public/
+  manifest.webmanifest
+src/
+  app/
+    AppShell.tsx
+  components/
+    layout/
+      AppHeader.tsx
+      SearchBar.tsx
+      SyncIndicator.tsx
+    shared/
+      ConfirmDialog.tsx
+      ErrorBoundary.tsx
+      useConfirmDialog.tsx
+    ui/
+      button.tsx
+      card.tsx
+      checkbox.tsx
+      dialog.tsx
+      dropdown-menu.tsx
+      input.tsx
+      label.tsx
+  domain/
+    entitlements.ts
+    org.ts
+  features/
+    auth/
+      AuthGuard.tsx
+      LoginOverlay.tsx
+      useAuth.ts
+      useCan.ts
+    dashboard/
+      components/
+        AddFolderModal.tsx
+        AddLinkModal.tsx
+        FolderAccordion.tsx
+        LinkCard.tsx
+      hooks/
+        useWorkspaceActions.ts
+        useWorkspaceSync.ts
+      DashboardPage.tsx
+      themes.ts
+    settings/
+      useBackup.ts
+    theme/
+      ThemeProvider.tsx
+      ThemeToggle.tsx
+      useTheme.ts
+    todos/
+      TodoSection.tsx
+      useTodos.ts
+  lib/
+    date.ts
+    utils.ts
+  pages/
+    NotFoundPage.tsx
+    SettingsPage.tsx
+  services/
+    firebase/
+      app.ts
+      auth.ts
+      config.ts
+      workspace.ts
+  shared/
+    api/
+      errors.ts
+  stores/
+    dashboardUIStore.ts
+    workspaceStore.ts
+  types/
+    auth.ts
+    workspace.ts
+  App.tsx
+  index.css
+  main.tsx
+  router.tsx
+  vite-env.d.ts
+.env.example
+.gitignore
+components.json
+index.html
+package.json
+postcss.config.js
+README.md
+tailwind.config.cjs
+tsconfig.app.json
+tsconfig.json
+tsconfig.node.json
+vite.config.ts
+wrangler.toml
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="public/manifest.webmanifest">
+{
+  "name": "Reset Launchpad",
+  "short_name": "Launchpad",
+  "description": "Personal Command Center - bookmarks, tasks, deadlines & reminders",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#030712",
+  "theme_color": "#030712",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ],
+  "categories": ["productivity", "utilities"],
+  "shortcuts": [
+    {
+      "name": "Tasks",
+      "url": "/dashboard"
+    }
+  ]
+}
+</file>
+
+<file path="src/app/AppShell.tsx">
+import { type ReactNode, useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { Home, ListChecks, Settings } from "lucide-react";
+import { useDashboardUI } from "@/stores/dashboardUIStore";
+import { cn } from "@/lib/utils";
+
+interface AppShellProps {
+  header: ReactNode;
+  children: ReactNode;
+}
+
+export function AppShell({ header, children }: AppShellProps) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [isMobile, setIsMobile] = useState(false);
+  const activeTab = useDashboardUI((s) => s.activeTab);
+  const setActiveTab = useDashboardUI((s) => s.setActiveTab);
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 1024);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+
+  const isSettings = location.pathname.includes("/settings");
+
+  return (
+    <div className="min-h-[100dvh] flex flex-col bg-background text-foreground overflow-x-hidden">
+      <div className="w-full">{header}</div>
+      <div className="flex-1">{children}</div>
+
+      {isMobile && (
+        <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card/90 backdrop-blur-xl pb-[env(safe-area-inset-bottom)]">
+          <div className="max-w-6xl mx-auto grid grid-cols-3 text-xs font-semibold text-muted-foreground">
+            {/* Tasks Tab */}
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("tasks");
+                if (location.pathname !== "/dashboard") navigate("/dashboard");
+              }}
+              className={cn(
+                "flex flex-col items-center py-2.5 transition-colors",
+                !isSettings && activeTab === "tasks" ? "text-primary font-bold" : "hover:text-foreground",
+              )}
+            >
+              <ListChecks className="h-4 w-4 mb-0.5" />
+              <span>Tasks</span>
+            </button>
+
+            {/* Launchpad Tab */}
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("launchpad");
+                if (location.pathname !== "/dashboard") navigate("/dashboard");
+              }}
+              className={cn(
+                "flex flex-col items-center py-2.5 transition-colors",
+                !isSettings && activeTab === "launchpad" ? "text-primary font-bold" : "hover:text-foreground",
+              )}
+            >
+              <Home className="h-4 w-4 mb-0.5" />
+              <span>Launchpad</span>
+            </button>
+
+            {/* Settings Tab */}
+            <button
+              type="button"
+              onClick={() => navigate("/settings")}
+              className={cn(
+                "flex flex-col items-center py-2.5 transition-colors",
+                isSettings ? "text-primary font-bold" : "hover:text-foreground",
+              )}
+            >
+              <Settings className="h-4 w-4 mb-0.5" />
+              <span>Settings</span>
+            </button>
+          </div>
+        </nav>
+      )}
+    </div>
+  );
+}
+</file>
+
+<file path="src/components/layout/AppHeader.tsx">
+import { Compass, Download, LogOut, MoreVertical, Settings, Upload } from "lucide-react";
+import { Link, useLocation } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/features/theme/ThemeToggle";
+import { useAuth } from "@/features/auth/useAuth";
+import { useCan } from "@/features/auth/useCan";
+import { useWorkspaceStore } from "@/stores/workspaceStore";
+import { useDashboardUI } from "@/stores/dashboardUIStore";
+import { useBackup } from "@/features/settings/useBackup";
+import { SyncIndicator } from "./SyncIndicator";
+import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+
+export function AppHeader() {
+  const user = useWorkspaceStore((s) => s.user);
+  const title = useWorkspaceStore((s) => s.workspace.settings.title);
+  const { logout } = useAuth();
+  const { exportBackup, importBackup } = useBackup();
+  const openLinkModal = useDashboardUI((s) => s.openLinkModal);
+  const openFolderModal = useDashboardUI((s) => s.openFolderModal);
+  const canCreateLink = useCan("links.create");
+  const canCreateFolder = useCan("folders.create");
+  const canExport = useCan("backup.export");
+  const canImport = useCan("backup.import");
+  const location = useLocation();
+
+  const avatarUrl =
+    user?.photoURL ??
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(
+      user?.email ?? "User",
+    )}&background=2563eb&color=fff`;
+
+  return (
+    <header className="sticky top-0 z-40 bg-card/90 backdrop-blur-md border-b border-border">
+      <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-4 min-w-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-primary text-primary-foreground flex items-center justify-center flex-shrink-0 shadow-sm">
+              <Compass className="h-4 w-4" strokeWidth={2.5} />
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-sm font-bold tracking-tight truncate">
+                {title}
+              </h1>
+              <SyncIndicator />
+            </div>
+          </div>
+          <nav className="hidden md:flex items-center gap-1 text-sm font-medium">
+            <Link
+              to="/dashboard"
+              className={cn(
+                "rounded-lg px-2.5 py-1 text-muted-foreground hover:text-foreground transition-colors",
+                !location.pathname.includes("/settings") &&
+                  "text-foreground bg-muted",
+              )}
+            >
+              Launchpad
+            </Link>
+            <Link
+              to="/settings"
+              className={cn(
+                "rounded-lg px-2.5 py-1 text-muted-foreground hover:text-foreground transition-colors",
+                location.pathname.includes("/settings") &&
+                  "text-foreground bg-muted",
+              )}
+            >
+              Settings
+            </Link>
+          </nav>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {/* Always visible ThemeToggle on both Mobile & Desktop */}
+          <ThemeToggle />
+
+          {canCreateLink ? (
+            <Button size="sm" onClick={() => openLinkModal()} className="hidden sm:inline-flex rounded-xl font-semibold">
+              Add Link
+            </Button>
+          ) : null}
+          {canCreateFolder ? (
+            <Button variant="secondary" size="sm" onClick={openFolderModal} className="hidden sm:inline-flex rounded-xl font-semibold">
+              <span>Folder</span>
+            </Button>
+          ) : null}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="secondary" size="icon" className="rounded-xl" aria-label="Open menu">
+                {user ? (
+                  <img
+                    src={avatarUrl}
+                    className="w-6 h-6 rounded-full object-cover"
+                    alt="Profile"
+                  />
+                ) : (
+                  <MoreVertical className="h-4 w-4" />
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56 rounded-2xl">
+              {user ? (
+                <DropdownMenuLabel>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="truncate text-xs font-semibold">
+                      {user.displayName ?? "Workspace User"}
+                    </span>
+                    <span className="text-[11px] font-normal text-muted-foreground truncate">
+                      {user.email}
+                    </span>
+                  </div>
+                </DropdownMenuLabel>
+              ) : null}
+              <DropdownMenuItem asChild>
+                <Link to="/settings">
+                  <Settings className="h-3.5 w-3.5 text-muted-foreground" />
+                  Settings
+                </Link>
+              </DropdownMenuItem>
+              {canExport ? (
+                <DropdownMenuItem onSelect={exportBackup}>
+                  <Download className="h-3.5 w-3.5 text-muted-foreground" />
+                  Export Backup
+                </DropdownMenuItem>
+              ) : null}
+              {canImport ? (
+                <DropdownMenuItem asChild>
+                  <label className="cursor-pointer">
+                    <Upload className="h-3.5 w-3.5 text-muted-foreground" />
+                    Import Backup
+                    <input
+                      type="file"
+                      accept=".json"
+                      onChange={importBackup}
+                      className="hidden"
+                    />
+                  </label>
+                </DropdownMenuItem>
+              ) : null}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem danger onSelect={logout}>
+                <LogOut className="h-3.5 w-3.5" />
+                Sign Out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+    </header>
+  );
+}
+</file>
+
+<file path="src/components/layout/SearchBar.tsx">
+import { Search, X } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
+
+interface SearchBarProps {
+  value: string;
+  onChange: (value: string) => void;
+  onClear: () => void;
+  placeholder?: string;
+}
+
+export function SearchBar({
+  value,
+  onChange,
+  onClear,
+  placeholder = "Search bookmarks…",
+}: SearchBarProps) {
+  return (
+    <div className="relative w-full">
+      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+      <Input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="pl-9 pr-8"
+      />
+      <button
+        type="button"
+        onClick={onClear}
+        className={cn(
+          "absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors duration-150",
+          !value && "hidden",
+        )}
+        aria-label="Clear search"
+      >
+        <X className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+}
+</file>
+
+<file path="src/components/layout/SyncIndicator.tsx">
+import { useWorkspaceStore } from "@/stores/workspaceStore";
+import { cn } from "@/lib/utils";
+
+export function SyncIndicator() {
+  const sync = useWorkspaceStore((s) => s.sync);
+  const dot =
+    sync.status === "active"
+      ? "bg-success"
+      : sync.status === "error"
+        ? "bg-destructive"
+        : "bg-muted-foreground/50";
+  return (
+    <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground leading-none">
+      <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", dot)} aria-hidden />
+      <span className="truncate">{sync.message}</span>
+    </div>
+  );
+}
+</file>
+
+<file path="src/components/shared/ConfirmDialog.tsx">
+export { useConfirmDialog } from "./useConfirmDialog.tsx";
+</file>
+
+<file path="src/components/shared/ErrorBoundary.tsx">
+import { Component, type ErrorInfo, type ReactNode } from "react";
+
+interface ErrorBoundaryProps {
+  children: ReactNode;
+}
+
+interface ErrorBoundaryState {
+  error: Error | null;
+}
+
+export class ErrorBoundary extends Component<
+  ErrorBoundaryProps,
+  ErrorBoundaryState
+> {
+  state: ErrorBoundaryState = { error: null };
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("ErrorBoundary", error, info.componentStack);
+  }
+
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <div className="min-h-[100dvh] flex flex-col items-center justify-center gap-3 p-6 text-center bg-background text-foreground">
+        <p className="font-medium">Something went wrong</p>
+        <p className="text-sm text-muted-foreground max-w-sm">
+          {this.state.error.message}
+        </p>
+        <button
+          type="button"
+          className="h-9 px-3.5 rounded-md bg-primary text-primary-foreground text-sm"
+          onClick={() => this.setState({ error: null })}
+        >
+          Try again
+        </button>
+      </div>
+    );
+  }
+}
+</file>
+
+<file path="src/components/shared/useConfirmDialog.tsx">
+import { useCallback, useState } from "react";
+import { AlertTriangle } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+
+export function useConfirmDialog() {
+  const [open, setOpen] = useState(false);
+  const [message, setMessage] = useState("");
+  const [resolver, setResolver] = useState<((ok: boolean) => void) | null>(
+    null,
+  );
+
+  const confirm = useCallback(
+    (msg: string) =>
+      new Promise<boolean>((resolve) => {
+        setMessage(msg);
+        setResolver(() => resolve);
+        setOpen(true);
+      }),
+    [],
+  );
+
+  const close = (ok: boolean) => {
+    resolver?.(ok);
+    setOpen(false);
+    setResolver(null);
+  };
+
+  const ConfirmDialogElement = (
+    <Dialog open={open} onOpenChange={(o) => !o && close(false)}>
+      <DialogContent className="max-w-xs p-5 text-center">
+        <DialogHeader className="justify-center mb-2">
+          <div className="w-10 h-10 rounded-md bg-destructive/10 text-destructive flex items-center justify-center mx-auto">
+            <AlertTriangle className="h-5 w-5" />
+          </div>
+        </DialogHeader>
+        <DialogTitle className="text-sm text-center font-medium">{message}</DialogTitle>
+        <div className="flex items-center justify-center gap-2 mt-2">
+          <Button variant="secondary" size="sm" onClick={() => close(false)}>
+            Cancel
+          </Button>
+          <Button variant="destructive" size="sm" onClick={() => close(true)}>
+            Delete
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+
+  return { confirm, ConfirmDialogElement };
+}
+</file>
+
+<file path="src/components/ui/button.tsx">
+import * as React from "react";
+import { Slot } from "@radix-ui/react-slot";
+import { cva, type VariantProps } from "class-variance-authority";
+import { cn } from "@/lib/utils";
+
+const buttonVariants = cva(
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50",
+  {
+    variants: {
+      variant: {
+        default: "bg-primary text-primary-foreground hover:opacity-90",
+        destructive:
+          "bg-destructive text-destructive-foreground hover:opacity-90",
+        outline:
+          "border border-border bg-background hover:bg-muted text-foreground",
+        secondary:
+          "bg-secondary text-secondary-foreground hover:bg-muted border border-border",
+        ghost: "hover:bg-muted text-foreground",
+        subtle: "bg-destructive/10 hover:bg-destructive/15 text-destructive",
+      },
+      size: {
+        default: "h-9 px-3.5",
+        sm: "h-8 px-3 text-xs",
+        lg: "h-10 px-5",
+        icon: "h-9 w-9",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+      size: "default",
+    },
+  },
+);
+
+export interface ButtonProps
+  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+    VariantProps<typeof buttonVariants> {
+  asChild?: boolean;
+}
+
+export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, variant, size, asChild = false, ...props }, ref) => {
+    const Comp = asChild ? Slot : "button";
+    return (
+      <Comp
+        className={cn(buttonVariants({ variant, size, className }))}
+        ref={ref}
+        {...props}
+      />
+    );
+  },
+);
+Button.displayName = "Button";
+
+export { buttonVariants };
+</file>
+
+<file path="src/components/ui/card.tsx">
+import * as React from "react";
+import { cn } from "@/lib/utils";
+
+export const Card = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn("rounded-lg border border-border bg-card shadow-sm", className)}
+    {...props}
+  />
+));
+Card.displayName = "Card";
+</file>
+
+<file path="src/components/ui/checkbox.tsx">
+import * as React from "react";
+import * as CheckboxPrimitive from "@radix-ui/react-checkbox";
+import { Check } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+const Checkbox = React.forwardRef<
+  React.ElementRef<typeof CheckboxPrimitive.Root>,
+  React.ComponentPropsWithoutRef<typeof CheckboxPrimitive.Root>
+>(({ className, ...props }, ref) => (
+  <CheckboxPrimitive.Root
+    ref={ref}
+    className={cn(
+      "peer h-4 w-4 shrink-0 rounded-sm border border-input ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground data-[state=checked]:border-primary transition-colors duration-150",
+      className,
+    )}
+    {...props}
+  >
+    <CheckboxPrimitive.Indicator
+      className={cn("flex items-center justify-center text-current")}
+    >
+      <Check className="h-3 w-3" strokeWidth={3} />
+    </CheckboxPrimitive.Indicator>
+  </CheckboxPrimitive.Root>
+));
+Checkbox.displayName = CheckboxPrimitive.Root.displayName;
+
+export { Checkbox };
+</file>
+
+<file path="src/components/ui/dialog.tsx">
+import * as React from "react";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
+import { X } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+const Dialog = DialogPrimitive.Root;
+const DialogTrigger = DialogPrimitive.Trigger;
+const DialogPortal = DialogPrimitive.Portal;
+const DialogClose = DialogPrimitive.Close;
+
+const DialogOverlay = React.forwardRef<
+  React.ElementRef<typeof DialogPrimitive.Overlay>,
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>
+>(({ className, ...props }, ref) => (
+  <DialogPrimitive.Overlay
+    ref={ref}
+    className={cn(
+      "fixed inset-0 z-50 bg-background/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+      className,
+    )}
+    {...props}
+  />
+));
+DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
+
+const DialogContent = React.forwardRef<
+  React.ElementRef<typeof DialogPrimitive.Content>,
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
+>(({ className, children, ...props }, ref) => (
+  <DialogPortal>
+    <DialogOverlay />
+    <DialogPrimitive.Content
+      ref={ref}
+      className={cn(
+        "fixed left-1/2 top-1/2 z-50 grid w-full max-w-md -translate-x-1/2 -translate-y-1/2 gap-4 bg-card rounded-lg border border-border p-5 shadow-lg duration-150 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
+        className,
+      )}
+      {...props}
+    >
+      {children}
+      <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm text-muted-foreground hover:text-foreground transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        <X className="h-4 w-4" />
+        <span className="sr-only">Close</span>
+      </DialogPrimitive.Close>
+    </DialogPrimitive.Content>
+  </DialogPortal>
+));
+DialogContent.displayName = DialogPrimitive.Content.displayName;
+
+const DialogHeader = ({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) => (
+  <div className={cn("flex items-center justify-between mb-1", className)} {...props} />
+);
+DialogHeader.displayName = "DialogHeader";
+
+const DialogTitle = React.forwardRef<
+  React.ElementRef<typeof DialogPrimitive.Title>,
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Title>
+>(({ className, ...props }, ref) => (
+  <DialogPrimitive.Title
+    ref={ref}
+    className={cn("font-semibold text-base text-foreground", className)}
+    {...props}
+  />
+));
+DialogTitle.displayName = DialogPrimitive.Title.displayName;
+
+const DialogDescription = React.forwardRef<
+  React.ElementRef<typeof DialogPrimitive.Description>,
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Description>
+>(({ className, ...props }, ref) => (
+  <DialogPrimitive.Description
+    ref={ref}
+    className={cn("text-sm text-muted-foreground", className)}
+    {...props}
+  />
+));
+DialogDescription.displayName = DialogPrimitive.Description.displayName;
+
+const DialogFooter = ({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) => (
+  <div className={cn("flex justify-end gap-2", className)} {...props} />
+);
+DialogFooter.displayName = "DialogFooter";
+
+export {
+  Dialog,
+  DialogPortal,
+  DialogOverlay,
+  DialogTrigger,
+  DialogClose,
+  DialogContent,
+  DialogHeader,
+  DialogFooter,
+  DialogTitle,
+  DialogDescription,
+};
+</file>
+
+<file path="src/components/ui/dropdown-menu.tsx">
+import * as React from "react";
+import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
+import { cn } from "@/lib/utils";
+
+const DropdownMenu = DropdownMenuPrimitive.Root;
+const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger;
+const DropdownMenuGroup = DropdownMenuPrimitive.Group;
+const DropdownMenuPortal = DropdownMenuPrimitive.Portal;
+
+const DropdownMenuContent = React.forwardRef<
+  React.ElementRef<typeof DropdownMenuPrimitive.Content>,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Content>
+>(({ className, sideOffset = 4, ...props }, ref) => (
+  <DropdownMenuPrimitive.Portal>
+    <DropdownMenuPrimitive.Content
+      ref={ref}
+      sideOffset={sideOffset}
+      className={cn(
+        "z-50 min-w-[12rem] overflow-hidden rounded-md border border-border bg-card p-1 text-foreground shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
+        className,
+      )}
+      {...props}
+    />
+  </DropdownMenuPrimitive.Portal>
+));
+DropdownMenuContent.displayName = DropdownMenuPrimitive.Content.displayName;
+
+const DropdownMenuItem = React.forwardRef<
+  React.ElementRef<typeof DropdownMenuPrimitive.Item>,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Item> & {
+    inset?: boolean;
+    danger?: boolean;
+  }
+>(({ className, inset, danger, ...props }, ref) => (
+  <DropdownMenuPrimitive.Item
+    ref={ref}
+    className={cn(
+      "relative flex cursor-pointer select-none items-center gap-2 rounded-sm px-2.5 py-1.5 text-sm outline-none transition-colors duration-150",
+      "focus:bg-muted",
+      danger && "text-destructive focus:bg-destructive/10",
+      inset && "pl-8",
+      className,
+    )}
+    {...props}
+  />
+));
+DropdownMenuItem.displayName = DropdownMenuPrimitive.Item.displayName;
+
+const DropdownMenuLabel = React.forwardRef<
+  React.ElementRef<typeof DropdownMenuPrimitive.Label>,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Label>
+>(({ className, ...props }, ref) => (
+  <DropdownMenuPrimitive.Label
+    ref={ref}
+    className={cn("px-2.5 py-2 text-sm font-medium", className)}
+    {...props}
+  />
+));
+DropdownMenuLabel.displayName = DropdownMenuPrimitive.Label.displayName;
+
+const DropdownMenuSeparator = React.forwardRef<
+  React.ElementRef<typeof DropdownMenuPrimitive.Separator>,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Separator>
+>(({ className, ...props }, ref) => (
+  <DropdownMenuPrimitive.Separator
+    ref={ref}
+    className={cn("-mx-1 my-1 h-px bg-border", className)}
+    {...props}
+  />
+));
+DropdownMenuSeparator.displayName = DropdownMenuPrimitive.Separator.displayName;
+
+export {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuGroup,
+  DropdownMenuPortal,
+};
+</file>
+
+<file path="src/components/ui/input.tsx">
+import * as React from "react";
+import { cn } from "@/lib/utils";
+
+export type InputProps = React.InputHTMLAttributes<HTMLInputElement>;
+
+export const Input = React.forwardRef<HTMLInputElement, InputProps>(
+  ({ className, type, ...props }, ref) => {
+    return (
+      <input
+        type={type}
+        className={cn(
+          "flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 transition-colors duration-150",
+          className,
+        )}
+        ref={ref}
+        {...props}
+      />
+    );
+  },
+);
+Input.displayName = "Input";
+</file>
+
+<file path="src/components/ui/label.tsx">
+import * as React from "react";
+import * as LabelPrimitive from "@radix-ui/react-label";
+import { cn } from "@/lib/utils";
+
+const Label = React.forwardRef<
+  React.ElementRef<typeof LabelPrimitive.Root>,
+  React.ComponentPropsWithoutRef<typeof LabelPrimitive.Root>
+>(({ className, ...props }, ref) => (
+  <LabelPrimitive.Root
+    ref={ref}
+    className={cn(
+      "text-xs font-medium text-muted-foreground peer-disabled:cursor-not-allowed peer-disabled:opacity-70",
+      className,
+    )}
+    {...props}
+  />
+));
+Label.displayName = LabelPrimitive.Root.displayName;
+
+export { Label };
+</file>
+
+<file path="src/domain/entitlements.ts">
+import type { OrgRole, PlanId } from "./org";
+
+export type Entitlement =
+  | "folders.create"
+  | "folders.edit"
+  | "links.create"
+  | "links.edit"
+  | "todos.edit"
+  | "backup.export"
+  | "backup.import"
+  | "workspace.invite"
+  | "billing.manage";
+
+const PLAN_ENTITLEMENTS: Record<PlanId, ReadonlySet<Entitlement>> = {
+  free: new Set([
+    "folders.create",
+    "folders.edit",
+    "links.create",
+    "links.edit",
+    "todos.edit",
+    "backup.export",
+    "backup.import",
+  ]),
+  pro: new Set([
+    "folders.create",
+    "folders.edit",
+    "links.create",
+    "links.edit",
+    "todos.edit",
+    "backup.export",
+    "backup.import",
+    "workspace.invite",
+    "billing.manage",
+  ]),
+};
+
+const ROLE_ENTITLEMENTS: Record<OrgRole, ReadonlySet<Entitlement> | "all"> = {
+  owner: "all",
+  admin: "all",
+  member: new Set([
+    "folders.create",
+    "folders.edit",
+    "links.create",
+    "links.edit",
+    "todos.edit",
+    "backup.export",
+    "backup.import",
+  ]),
+  viewer: new Set(),
+};
+
+export function can(
+  role: OrgRole,
+  plan: PlanId,
+  entitlement: Entitlement,
+): boolean {
+  const roleGrant = ROLE_ENTITLEMENTS[role];
+  if (roleGrant !== "all" && !roleGrant.has(entitlement)) return false;
+  return PLAN_ENTITLEMENTS[plan].has(entitlement);
+}
+</file>
+
+<file path="src/domain/org.ts">
+import type { AppUser } from "@/types/auth";
+
+export type OrgRole = "owner" | "admin" | "member" | "viewer";
+
+export type PlanId = "free" | "pro";
+
+export interface Organization {
+  id: string;
+  name: string;
+  plan: PlanId;
+}
+
+export interface Membership {
+  orgId: string;
+  userId: string;
+  role: OrgRole;
+}
+
+export const DEFAULT_ORG: Organization = {
+  id: "org_personal",
+  name: "Personal",
+  plan: "pro",
+};
+
+export function personalOrganization(user: AppUser): Organization {
+  const name = user.displayName?.trim();
+  return {
+    id: `org_${user.uid}`,
+    name: name ? `${name}'s workspace` : "Personal",
+    plan: "pro",
+  };
+}
+
+export function sessionFromUser(user: AppUser | null): {
+  org: Organization;
+  role: OrgRole;
+} {
+  if (!user) {
+    return { org: DEFAULT_ORG, role: "viewer" };
+  }
+  return { org: personalOrganization(user), role: "owner" };
+}
+</file>
+
+<file path="src/features/auth/AuthGuard.tsx">
+import { type ReactNode } from "react";
+import { useAuth } from "./useAuth";
+
+interface AuthGuardProps {
+  children: ReactNode;
+}
+
+export function AuthGuard({ children }: AuthGuardProps) {
+  const { user } = useAuth();
+  if (!user) {
+    return null;
+  }
+  return <>{children}</>;
+}
+</file>
+
+<file path="src/features/auth/LoginOverlay.tsx">
+import { Compass } from "lucide-react";
+import { useAuth } from "./useAuth";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+
+export function LoginOverlay() {
+  const { user, authError, authBusy, login, loginLocal } = useAuth();
+  const isHidden = !!user;
+
+  return (
+    <div
+      className={cn(
+        "fixed inset-0 z-50 flex flex-col items-center justify-center p-6 bg-background transition-opacity duration-150",
+        isHidden && "opacity-0 pointer-events-none",
+      )}
+      aria-hidden={isHidden}
+    >
+      <div className="w-12 h-12 rounded-lg bg-primary text-primary-foreground flex items-center justify-center mb-6">
+        <Compass className="w-6 h-6" strokeWidth={2.25} />
+      </div>
+      <h1 className="text-2xl font-semibold tracking-tight mb-2 text-center">
+        Reset Launchpad
+      </h1>
+      <p className="text-muted-foreground text-sm text-center max-w-sm mb-8">
+        Sign in to open your workspace and sync bookmarks across devices.
+      </p>
+      <Button onClick={login} disabled={authBusy} size="lg" variant="outline">
+        <img
+          src="https://www.google.com/favicon.ico"
+          className="w-4 h-4"
+          alt=""
+        />
+        <span>Sign in with Google</span>
+      </Button>
+      <button
+        type="button"
+        onClick={loginLocal}
+        className="mt-3 text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors duration-150"
+      >
+        Continue locally (no cloud sync)
+      </button>
+      {authError ? (
+        <div
+          role="alert"
+          className="mt-4 px-3 py-2 bg-destructive/10 border border-destructive/20 text-destructive rounded-md text-xs max-w-sm text-center"
+        >
+          {authError}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+</file>
+
+<file path="src/features/auth/useAuth.ts">
+import { useEffect, useState } from "react";
+import { subscribeAuth, signInWithGoogle, signOutCurrent } from "@/services/firebase/auth";
+import { toAppError } from "@/shared/api/errors";
+import { useWorkspaceStore } from "@/stores/workspaceStore";
+
+export function useAuth() {
+  const setUser = useWorkspaceStore((s) => s.setUser);
+  const user = useWorkspaceStore((s) => s.user);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [authBusy, setAuthBusy] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = subscribeAuth(setUser, (err) => {
+      setAuthError(toAppError(err).message);
+    });
+    return () => unsubscribe();
+  }, [setUser]);
+
+  const login = async () => {
+    setAuthError(null);
+    setAuthBusy(true);
+    try {
+      await signInWithGoogle();
+    } catch (err) {
+      const mapped = toAppError(err);
+      if (mapped.message.includes("auth/internal-error") || mapped.message.includes("internal-error")) {
+        setAuthError("Sign-in failed (auth/internal-error). Enable Google provider in Firebase Console and add localhost to authorized domains. See README.");
+      } else {
+        setAuthError(mapped.message);
+      }
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const loginLocal = () => {
+    setAuthError(null);
+    setUser({ uid: "local", email: "local@launchpad", displayName: "Local User", photoURL: null });
+  };
+
+  const logout = async () => {
+    try {
+      await signOutCurrent();
+    } catch (err) {
+      setAuthError(toAppError(err).message);
+    }
+  };
+
+  return { user, authError, authBusy, login, loginLocal, logout };
+}
+</file>
+
+<file path="src/features/auth/useCan.ts">
+import { can, type Entitlement } from "@/domain/entitlements";
+import { useWorkspaceStore } from "@/stores/workspaceStore";
+
+export function useCan(entitlement: Entitlement): boolean {
+  const role = useWorkspaceStore((s) => s.role);
+  const plan = useWorkspaceStore((s) => s.org.plan);
+  return can(role, plan, entitlement);
+}
+</file>
+
+<file path="src/features/dashboard/components/AddFolderModal.tsx">
+import { useEffect, useState, type FormEvent } from "react";
+import { FolderCog, FolderPlus, Plus, Trash2 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useWorkspaceStore } from "@/stores/workspaceStore";
+import { useWorkspaceActions } from "../hooks/useWorkspaceActions";
+import { useConfirmDialog } from "@/components/shared/ConfirmDialog";
+import type { Folder as FolderT, FolderColor, FolderStyle } from "@/types/workspace";
+
+interface AddFolderModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  editingId: string | null;
+  onRequestEditReset: () => void;
+  onCreated?: (id: string) => void;
+}
+
+const PRESET_ICONS = [
+  "fa-solid fa-folder",
+  "fa-solid fa-star",
+  "fa-solid fa-fire",
+  "fa-solid fa-bolt",
+  "fa-solid fa-wand-magic-sparkles",
+  "fa-solid fa-comments",
+  "fa-solid fa-code",
+  "fa-solid fa-rocket",
+  "fa-solid fa-dumbbell",
+  "fa-solid fa-briefcase",
+  "fa-solid fa-globe",
+  "fa-solid fa-chart-line",
+];
+
+const COLOR_OPTIONS: { value: FolderColor; label: string }[] = [
+  { value: "amber", label: "Amber" },
+  { value: "emerald", label: "Green" },
+  { value: "violet", label: "Violet" },
+  { value: "rose", label: "Rose" },
+  { value: "cyan", label: "Cyan" },
+  { value: "blue", label: "Blue" },
+];
+
+const STYLE_OPTIONS: { value: FolderStyle; label: string }[] = [
+  { value: "filled", label: "Filled" },
+  { value: "outline", label: "Outline" },
+];
+
+const SELECT_CLASS =
+  "mt-1.5 w-full h-9 px-3 rounded-md bg-background border border-input text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
+export function AddFolderModal({
+  open,
+  onOpenChange,
+  editingId,
+  onRequestEditReset,
+  onCreated,
+}: AddFolderModalProps) {
+  const columns = useWorkspaceStore((s) => s.workspace.columns);
+  const { addFolder, updateFolder, removeFolder } = useWorkspaceActions();
+  const { confirm, ConfirmDialogElement } = useConfirmDialog();
+
+  const existing: FolderT | undefined = editingId
+    ? columns.find((c) => c.id === editingId)
+    : undefined;
+
+  const [title, setTitle] = useState("");
+  const [color, setColor] = useState<FolderColor>("amber");
+  const [style, setStyle] = useState<FolderStyle>("filled");
+  const [icon, setIcon] = useState("fa-solid fa-folder");
+
+  useEffect(() => {
+    if (!open) return;
+    if (existing) {
+      setTitle(existing.title);
+      setColor(existing.color);
+      setStyle(existing.style);
+      setIcon(existing.icon);
+    } else {
+      setTitle("");
+      setColor("amber");
+      setStyle("filled");
+      setIcon("fa-solid fa-folder");
+    }
+  }, [open, existing]);
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    const trimmed = title.trim();
+    if (!trimmed) return;
+    const payload = {
+      title: trimmed,
+      color,
+      style,
+      icon: icon.trim() || "fa-solid fa-folder",
+    };
+    if (editingId) {
+      updateFolder(editingId, payload);
+    } else {
+      const id = addFolder(payload);
+      onCreated?.(id);
+    }
+    onOpenChange(false);
+    onRequestEditReset();
+  };
+
+  const handleDelete = async () => {
+    if (!editingId) return;
+    const folder = columns.find((c) => c.id === editingId);
+    if (!folder) return;
+    const ok = await confirm(
+      `Delete folder "${folder.title}" and all its links?`,
+    );
+    if (ok) {
+      removeFolder(editingId);
+      onOpenChange(false);
+      onRequestEditReset();
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            {editingId ? (
+              <>
+                <FolderCog className="h-4 w-4 text-muted-foreground" /> Edit Folder
+              </>
+            ) : (
+              <>
+                <FolderPlus className="h-4 w-4 text-muted-foreground" /> New Folder
+              </>
+            )}
+          </DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <Label htmlFor="folderTitle">Folder Title *</Label>
+            <Input
+              id="folderTitle"
+              required
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g. Work Tools, Socials, Dev"
+              className="mt-1.5"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label htmlFor="folderColor">Color Theme</Label>
+              <select
+                id="folderColor"
+                value={color}
+                onChange={(e) => setColor(e.target.value as FolderColor)}
+                 className={SELECT_CLASS}
+              >
+                {COLOR_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Label htmlFor="folderStyle">Background Style</Label>
+              <select
+                id="folderStyle"
+                value={style}
+                onChange={(e) => setStyle(e.target.value as FolderStyle)}
+                 className={SELECT_CLASS}
+              >
+                {STYLE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div>
+            <Label className="block mb-1.5">Choose Icon</Label>
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-9 h-9 rounded-md bg-muted border border-border flex items-center justify-center text-foreground text-sm flex-shrink-0">
+                <i className={icon || "fa-solid fa-folder"} />
+              </div>
+              <Input
+                value={icon}
+                onChange={(e) => setIcon(e.target.value)}
+                placeholder="fa-solid fa-folder"
+                className="text-xs"
+              />
+            </div>
+            <div className="grid grid-cols-6 sm:grid-cols-8 gap-1.5 pt-1">
+              {PRESET_ICONS.map((cls) => (
+                <button
+                  key={cls}
+                  type="button"
+                  onClick={() => setIcon(cls)}
+                  className={cnPreset(
+                    icon === cls,
+                    "p-2 rounded-md bg-muted hover:bg-primary hover:text-primary-foreground transition-colors duration-150 text-muted-foreground",
+                  )}
+                >
+                  <i className={cls} />
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="pt-3 flex items-center justify-between gap-2 border-t border-border">
+            {editingId ? (
+              <Button
+                type="button"
+                variant="subtle"
+                onClick={handleDelete}
+              >
+                <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
+              </Button>
+            ) : (
+              <span />
+            )}
+            <div className="flex items-center gap-2 ml-auto">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => onOpenChange(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit">
+                {editingId ? (
+                  "Save Changes"
+                ) : (
+                  <>
+                    <Plus className="h-3.5 w-3.5" /> Save Folder
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </form>
+        {ConfirmDialogElement}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function cnPreset(active: boolean, base: string) {
+  return active ? `${base} bg-primary text-primary-foreground` : base;
+}
+</file>
+
+<file path="src/features/dashboard/components/AddLinkModal.tsx">
+import { useEffect, useState, type FormEvent } from "react";
+import { Bookmark, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useWorkspaceStore } from "@/stores/workspaceStore";
+import { useWorkspaceActions } from "../hooks/useWorkspaceActions";
+import { useConfirmDialog } from "@/components/shared/ConfirmDialog";
+import type { LinkItem } from "@/types/workspace";
+
+interface AddLinkModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  editingId: string | null;
+  preferredColumnId: string | null;
+  onRequestEditReset: () => void;
+}
+
+export function AddLinkModal({
+  open,
+  onOpenChange,
+  editingId,
+  preferredColumnId,
+  onRequestEditReset,
+}: AddLinkModalProps) {
+  const columns = useWorkspaceStore((s) => s.workspace.columns);
+  const links = useWorkspaceStore((s) => s.workspace.links);
+  const { addLink, updateLink, removeLink } = useWorkspaceActions();
+  const { confirm, ConfirmDialogElement } = useConfirmDialog();
+
+  const existing: LinkItem | undefined = editingId
+    ? links.find((l) => l.id === editingId)
+    : undefined;
+
+  const [title, setTitle] = useState("");
+  const [url, setUrl] = useState("");
+  const [columnId, setColumnId] = useState<string>("");
+  const [description, setDescription] = useState("");
+  const [pinned, setPinned] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    if (existing) {
+      setTitle(existing.title);
+      setUrl(existing.url);
+      setColumnId(existing.columnId);
+      setDescription(existing.description ?? "");
+      setPinned(Boolean(existing.pinned));
+    } else {
+      setTitle("");
+      setUrl("");
+      setDescription("");
+      setPinned(false);
+      const fallback =
+        preferredColumnId ?? columns[0]?.id ?? "";
+      setColumnId(fallback);
+    }
+  }, [open, existing, preferredColumnId, columns]);
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    if (!columnId) return;
+    const payload = {
+      title: title.trim(),
+      url: url.trim(),
+      columnId,
+      description: description.trim() || undefined,
+      pinned,
+    };
+    if (editingId) {
+      updateLink(editingId, payload);
+    } else {
+      addLink(payload);
+    }
+    onOpenChange(false);
+    onRequestEditReset();
+  };
+
+  const handleDelete = async () => {
+    if (!editingId) return;
+    const link = links.find((l) => l.id === editingId);
+    if (!link) return;
+    const ok = await confirm(`Delete "${link.title}"?`);
+    if (ok) {
+      removeLink(editingId);
+      onOpenChange(false);
+      onRequestEditReset();
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            {editingId ? (
+              <>
+                <Pencil className="h-4 w-4 text-muted-foreground" /> Edit Link
+              </>
+            ) : (
+              <>
+                <Bookmark className="h-4 w-4 text-muted-foreground" /> Add Link
+              </>
+            )}
+          </DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <Label htmlFor="linkTitle">Website Title *</Label>
+            <Input
+              id="linkTitle"
+              required
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g. ChatGPT, Studio, Notion"
+              className="mt-1.5"
+            />
+          </div>
+          <div>
+            <Label htmlFor="linkUrl">URL / Web Link *</Label>
+            <Input
+              id="linkUrl"
+              type="url"
+              required
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://chatgpt.com"
+              className="mt-1.5"
+            />
+          </div>
+          <div>
+            <Label htmlFor="linkFolder">Folder</Label>
+            <select
+              id="linkFolder"
+              value={columnId}
+              onChange={(e) => setColumnId(e.target.value)}
+              className="mt-1.5 w-full h-9 px-3 rounded-md bg-background border border-input text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {columns.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.title}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <Label htmlFor="linkDesc">Description (Optional)</Label>
+            <Input
+              id="linkDesc"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Brief reminder or note"
+              className="mt-1.5"
+            />
+          </div>
+          <div className="flex items-center gap-2 pt-1">
+            <Checkbox
+              id="linkPinned"
+              checked={pinned}
+              onCheckedChange={(v) => setPinned(Boolean(v))}
+            />
+            <Label
+              htmlFor="linkPinned"
+              className="font-medium cursor-pointer mb-0"
+            >
+              Pin to top of folder
+            </Label>
+          </div>
+          <div className="pt-3 flex items-center justify-between gap-2 border-t border-border">
+            {editingId ? (
+              <Button
+                type="button"
+                variant="subtle"
+                onClick={handleDelete}
+              >
+                <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
+              </Button>
+            ) : (
+              <span />
+            )}
+            <div className="flex items-center gap-2 ml-auto">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => onOpenChange(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit">
+                {editingId ? (
+                  "Save Changes"
+                ) : (
+                  <>
+                    <Plus className="h-3.5 w-3.5" /> Save Link
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </form>
+        {ConfirmDialogElement}
+      </DialogContent>
+    </Dialog>
+  );
+}
+</file>
+
+<file path="src/features/dashboard/components/FolderAccordion.tsx">
+import { ChevronDown, Pencil, Plus } from "lucide-react";
+import type { Folder, LinkItem } from "@/types/workspace";
+import { folderAccent } from "../themes";
+import { LinkCard } from "./LinkCard";
+import { cn } from "@/lib/utils";
+
+interface FolderAccordionProps {
+  folder: Folder;
+  index: number;
+  links: LinkItem[];
+  isOpen: boolean;
+  onToggle: (id: string) => void;
+  onAddLink: (columnId: string) => void;
+  onEditFolder: (columnId: string) => void;
+  onEditLink: (id: string) => void;
+  onDeleteLink: (id: string) => void;
+}
+
+export function FolderAccordion({
+  folder,
+  index,
+  links,
+  isOpen,
+  onToggle,
+  onAddLink,
+  onEditFolder,
+  onEditLink,
+  onDeleteLink,
+}: FolderAccordionProps) {
+  const accent = folderAccent(folder.color, index);
+
+  const stop = (e: React.MouseEvent) => e.stopPropagation();
+
+  return (
+    <div className="relative rounded-lg border border-border bg-card overflow-hidden">
+      <span
+        className={cn("absolute left-0 top-3 bottom-3 w-0.5 rounded-full", accent)}
+        aria-hidden
+      />
+      <button
+        type="button"
+        onClick={() => onToggle(folder.id)}
+        aria-expanded={isOpen}
+        className="w-full pl-4 pr-3 py-3 flex items-center justify-between text-left hover:bg-muted/60 transition-colors duration-150"
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-7 h-7 rounded-md bg-muted flex items-center justify-center text-xs flex-shrink-0 text-foreground">
+            <i className={folder.icon || "fa-solid fa-folder"} />
+          </div>
+          <div className="min-w-0">
+            <div className="font-medium text-sm truncate">{folder.title}</div>
+            <div className="text-[11px] text-muted-foreground">
+              {links.length} {links.length === 1 ? "link" : "links"}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-0.5" onClick={stop}>
+          <button
+            type="button"
+            onClick={() => onAddLink(folder.id)}
+            className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors duration-150"
+            title="Add link"
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => onEditFolder(folder.id)}
+            className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors duration-150"
+            title="Edit folder"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+          <span
+            className={cn(
+              "ml-1 w-5 h-5 flex items-center justify-center text-muted-foreground transition-transform duration-150",
+              isOpen && "rotate-180",
+            )}
+          >
+            <ChevronDown className="h-3.5 w-3.5" />
+          </span>
+        </div>
+      </button>
+
+      {isOpen && (
+        <div className="px-3 pb-3 pt-0 border-t border-border">
+          {links.length === 0 ? (
+            <div className="py-6 text-center text-xs text-muted-foreground">
+              No links yet
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-1.5 pt-2">
+              {links.map((link) => (
+                <LinkCard
+                  key={link.id}
+                  link={link}
+                  onEdit={onEditLink}
+                  onDelete={onDeleteLink}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+</file>
+
+<file path="src/features/dashboard/components/LinkCard.tsx">
+import { useState, type MouseEvent } from "react";
+import { Pencil, Pin, Trash2 } from "lucide-react";
+import type { LinkItem } from "@/types/workspace";
+import { tryGetDomain } from "@/lib/date";
+import { cn } from "@/lib/utils";
+
+interface LinkCardProps {
+  link: LinkItem;
+  onEdit: (id: string) => void;
+  onDelete: (id: string) => void;
+}
+
+const FALLBACK_FAVICON = "https://cdn-icons-png.flaticon.com/512/1006/1006771.png";
+
+export function LinkCard({ link, onEdit, onDelete }: LinkCardProps) {
+  const domain = tryGetDomain(link.url);
+  const [faviconSrc, setFaviconSrc] = useState(
+    `https://www.google.com/s2/favicons?domain=${domain}&sz=64`,
+  );
+
+  const handleEdit = (e: MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onEdit(link.id);
+  };
+  const handleDelete = (e: MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onDelete(link.id);
+  };
+
+  return (
+    <a
+      href={link.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="group flex items-center gap-3 rounded-md border border-transparent hover:border-border hover:bg-muted/50 px-2.5 py-2 transition-colors duration-150"
+    >
+      <div className="w-6 h-6 rounded-md bg-muted flex items-center justify-center flex-shrink-0">
+        <img
+          src={faviconSrc}
+          onError={() => setFaviconSrc(FALLBACK_FAVICON)}
+          className="w-3.5 h-3.5 rounded-sm object-contain"
+          alt=""
+        />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          <span className="font-medium text-sm truncate">{link.title}</span>
+          {link.pinned ? (
+            <Pin className="h-3 w-3 text-muted-foreground flex-shrink-0" fill="currentColor" />
+          ) : null}
+        </div>
+        <div className="text-[11px] text-muted-foreground truncate">
+          {link.description || domain}
+        </div>
+      </div>
+      <div
+        className={cn(
+          "flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150",
+        )}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          type="button"
+          onClick={handleEdit}
+          className="p-1 text-muted-foreground hover:text-foreground"
+        >
+          <Pencil className="h-3 w-3" />
+        </button>
+        <button
+          type="button"
+          onClick={handleDelete}
+          className="p-1 text-muted-foreground hover:text-destructive"
+        >
+          <Trash2 className="h-3 w-3" />
+        </button>
+      </div>
+    </a>
+  );
+}
+</file>
+
+<file path="src/features/dashboard/hooks/useWorkspaceActions.ts">
+import { useCallback } from "react";
+import { useWorkspaceStore } from "@/stores/workspaceStore";
+import type { Folder, LinkItem } from "@/types/workspace";
+
+function newId(prefix: string): string {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+export function useWorkspaceActions() {
+  const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
+
+  const addLink = useCallback(
+    (input: Omit<LinkItem, "id">) => {
+      const link: LinkItem = { ...input, id: newId("link") };
+      setWorkspace((prev) => ({ ...prev, links: [...prev.links, link] }));
+    },
+    [setWorkspace],
+  );
+
+  const updateLink = useCallback(
+    (id: string, patch: Partial<LinkItem>) => {
+      setWorkspace((prev) => ({
+        ...prev,
+        links: prev.links.map((l) => (l.id === id ? { ...l, ...patch } : l)),
+      }));
+    },
+    [setWorkspace],
+  );
+
+  const removeLink = useCallback(
+    (id: string) => {
+      setWorkspace((prev) => ({
+        ...prev,
+        links: prev.links.filter((l) => l.id !== id),
+      }));
+    },
+    [setWorkspace],
+  );
+
+  const addFolder = useCallback(
+    (input: Omit<Folder, "id">) => {
+      const folder: Folder = { ...input, id: newId("col") };
+      setWorkspace((prev) => ({ ...prev, columns: [...prev.columns, folder] }));
+      return folder.id;
+    },
+    [setWorkspace],
+  );
+
+  const updateFolder = useCallback(
+    (id: string, patch: Partial<Folder>) => {
+      setWorkspace((prev) => ({
+        ...prev,
+        columns: prev.columns.map((c) =>
+          c.id === id ? { ...c, ...patch } : c,
+        ),
+      }));
+    },
+    [setWorkspace],
+  );
+
+  const removeFolder = useCallback(
+    (id: string) => {
+      setWorkspace((prev) => ({
+        ...prev,
+        columns: prev.columns.filter((c) => c.id !== id),
+        links: prev.links.filter((l) => l.columnId !== id),
+      }));
+    },
+    [setWorkspace],
+  );
+
+  return {
+    addLink,
+    updateLink,
+    removeLink,
+    addFolder,
+    updateFolder,
+    removeFolder,
+  };
+}
+</file>
+
+<file path="src/features/dashboard/hooks/useWorkspaceSync.ts">
+import { useEffect, useRef } from "react";
+import { persistWorkspace, subscribeWorkspace } from "@/services/firebase/workspace";
+import { formatAppError, toAppError } from "@/shared/api/errors";
+import { useWorkspaceStore, selectWorkspace } from "@/stores/workspaceStore";
+import type { Workspace } from "@/types/workspace";
+
+const LOCAL_STORAGE_KEY = "launchpad_local_workspace";
+
+function fingerprint(workspace: Workspace): string {
+  return JSON.stringify(workspace);
+}
+
+export function useWorkspaceSync() {
+  const user = useWorkspaceStore((s) => s.user);
+  const workspace = useWorkspaceStore(selectWorkspace);
+  const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
+  const setSync = useWorkspaceStore((s) => s.setSync);
+  const hasReceivedRemote = useRef(false);
+  const lastFingerprint = useRef("");
+  const skipNextPersist = useRef(false);
+
+  // 1. Initial local cache hydration
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed && Array.isArray(parsed.columns)) {
+          setWorkspace(parsed);
+        }
+      }
+    } catch {
+      // Ignore cache parse errors
+    }
+  }, [setWorkspace]);
+
+  // 2. Cloud Subscription
+  useEffect(() => {
+    if (!user) {
+      hasReceivedRemote.current = false;
+      lastFingerprint.current = "";
+      setSync({ status: "offline", message: "Signed Out" });
+      return;
+    }
+
+    if (user.uid === "local") {
+      hasReceivedRemote.current = true;
+      setSync({ status: "active", message: "Saved Locally" });
+      return;
+    }
+
+    setSync({ status: "offline", message: "Connecting..." });
+
+    const unsubscribe = subscribeWorkspace(user.uid, {
+      onReady: () => {
+        hasReceivedRemote.current = true;
+      },
+      onData: (remote) => {
+        hasReceivedRemote.current = true;
+        const fp = fingerprint(remote);
+        if (fp === lastFingerprint.current) {
+          setSync({ status: "active", message: "Synced with Cloud" });
+          return;
+        }
+        lastFingerprint.current = fp;
+        skipNextPersist.current = true;
+        setWorkspace(remote);
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(remote));
+        setSync({ status: "active", message: "Synced with Cloud" });
+      },
+      onError: (err) => {
+        hasReceivedRemote.current = true;
+        const error = toAppError(err);
+        setSync({
+          status: "error",
+          message: formatAppError("Sync Error", error),
+          error,
+        });
+      },
+    });
+
+    return () => unsubscribe();
+  }, [user, setWorkspace, setSync]);
+
+  // 3. Debounced Persist (Saves to localStorage instantly, pushes to Firestore if logged in)
+  useEffect(() => {
+    // Always persist to local cache first
+    try {
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(workspace));
+    } catch {
+      // Storage quota or private mode protection
+    }
+
+    if (!user) return;
+    if (user.uid === "local") {
+      setSync({ status: "active", message: "Saved Locally" });
+      return;
+    }
+
+    if (!hasReceivedRemote.current) return;
+    if (skipNextPersist.current) {
+      skipNextPersist.current = false;
+      return;
+    }
+
+    const fp = fingerprint(workspace);
+    if (fp === lastFingerprint.current) return;
+
+    const handle = setTimeout(() => {
+      lastFingerprint.current = fp;
+      setSync({ status: "offline", message: "Saving..." });
+
+      persistWorkspace(user.uid, workspace)
+        .then(() => {
+          setSync({ status: "active", message: "Synced with Cloud" });
+        })
+        .catch((err) => {
+          const error = toAppError(err);
+          setSync({
+            status: "error",
+            message: formatAppError("Save Failed", error),
+            error,
+          });
+        });
+    }, 250);
+
+    return () => clearTimeout(handle);
+  }, [workspace, user, setSync]);
+}
+</file>
+
+<file path="src/features/dashboard/DashboardPage.tsx">
+import { useMemo, useState } from "react";
+import { FolderOpen } from "lucide-react";
+import { useWorkspaceStore } from "@/stores/workspaceStore";
+import { useDashboardUI } from "@/stores/dashboardUIStore";
+import { SearchBar } from "@/components/layout/SearchBar";
+import { TodoSection } from "@/features/todos/TodoSection";
+import { FolderAccordion } from "./components/FolderAccordion";
+import { AddLinkModal } from "./components/AddLinkModal";
+import { AddFolderModal } from "./components/AddFolderModal";
+import { useConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { useWorkspaceActions } from "./hooks/useWorkspaceActions";
+import { Button } from "@/components/ui/button";
+import { useCan } from "@/features/auth/useCan";
+import { cn } from "@/lib/utils";
+import type { LinkItem } from "@/types/workspace";
+
+export function DashboardPage() {
+  const columns = useWorkspaceStore((s) => s.workspace.columns);
+  const links = useWorkspaceStore((s) => s.workspace.links);
+  const { removeLink } = useWorkspaceActions();
+  const { confirm, ConfirmDialogElement } = useConfirmDialog();
+  const canCreateFolder = useCan("folders.create");
+
+  const activeTab = useDashboardUI((s) => s.activeTab);
+  const linkModalOpen = useDashboardUI((s) => s.linkModalOpen);
+  const folderModalOpen = useDashboardUI((s) => s.folderModalOpen);
+  const editingLinkId = useDashboardUI((s) => s.editingLinkId);
+  const editingFolderId = useDashboardUI((s) => s.editingFolderId);
+  const preferredColumnId = useDashboardUI((s) => s.preferredColumnId);
+  const closeLinkModal = useDashboardUI((s) => s.closeLinkModal);
+  const closeFolderModal = useDashboardUI((s) => s.closeFolderModal);
+  const openEditLinkModal = useDashboardUI((s) => s.openEditLinkModal);
+  const openEditFolderModal = useDashboardUI((s) => s.openEditFolderModal);
+
+  const [search, setSearch] = useState("");
+  const [openFolders, setOpenFolders] = useState<Set<string>>(new Set());
+
+  const searchLower = search.toLowerCase().trim();
+
+  // Helper to float pinned bookmarks to the top
+  const sortLinks = (items: LinkItem[]) =>
+    [...items].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
+
+  const filteredColumns = useMemo(() => {
+    if (!searchLower) {
+      return columns.map((col, i) => ({
+        col,
+        links: sortLinks(links.filter((l) => l.columnId === col.id)),
+        idx: i,
+      }));
+    }
+    return columns
+      .map((col, i) => {
+        const colLinks = links.filter((l) => l.columnId === col.id);
+        const matchesTitle = col.title.toLowerCase().includes(searchLower);
+        const matched = colLinks.filter(
+          (l) =>
+            l.title?.toLowerCase().includes(searchLower) ||
+            l.url?.toLowerCase().includes(searchLower) ||
+            l.description?.toLowerCase().includes(searchLower),
+        );
+        if (matchesTitle || matched.length) {
+          return {
+            col,
+            links: sortLinks(matchesTitle ? colLinks : matched),
+            idx: i,
+          };
+        }
+        return null;
+      })
+      .filter(Boolean) as {
+      col: (typeof columns)[0];
+      links: typeof links;
+      idx: number;
+    }[];
+  }, [columns, links, searchLower]);
+
+  const toggleFolder = (id: string) => {
+    setOpenFolders((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleDeleteLink = async (id: string) => {
+    const link = links.find((l) => l.id === id);
+    if (!link) return;
+    if (await confirm(`Delete "${link.title}"?`)) removeLink(id);
+  };
+
+  const handleFolderCreated = (id: string) => {
+    setOpenFolders((prev) => new Set(prev).add(id));
+  };
+
+  const showEmpty = columns.length === 0;
+
+  return (
+    <main className="flex-1 max-w-6xl mx-auto w-full p-4 sm:p-6 flex flex-col gap-6 pb-20 lg:pb-8">
+      <header className="flex flex-col gap-1">
+        <h2 className="text-lg font-semibold tracking-tight">Workspace</h2>
+        <p className="text-sm text-muted-foreground">
+          Tasks, bookmarks, and links in one place.
+        </p>
+      </header>
+
+      <SearchBar
+        value={search}
+        onChange={setSearch}
+        onClear={() => setSearch("")}
+        placeholder="Search tasks, bookmarks, URLs, folders..."
+      />
+
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        {/* Tasks: Visible by default on mobile, right column on desktop */}
+        <div className={cn("lg:col-span-2", activeTab === "tasks" ? "block" : "hidden lg:block")}>
+          <TodoSection searchTerm={search} />
+        </div>
+
+        {/* Launchpad: Visible when Launchpad tab is active on mobile, left column on desktop */}
+        <div className={cn("lg:col-span-3 lg:order-first", activeTab === "launchpad" ? "block" : "hidden lg:block")}>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Folders
+            </h3>
+          </div>
+
+          {showEmpty ? (
+            <div className="rounded-lg border border-dashed border-border bg-card p-8 text-center">
+              <div className="mx-auto mb-3 w-9 h-9 rounded-md bg-muted flex items-center justify-center text-muted-foreground">
+                <FolderOpen className="h-4 w-4" />
+              </div>
+              <div className="font-medium mb-1 text-sm">No folders yet</div>
+              <p className="text-sm text-muted-foreground mb-4">
+                Create a folder to start organizing links.
+              </p>
+              {canCreateFolder ? (
+                <Button
+                  size="sm"
+                  onClick={() => useDashboardUI.getState().openFolderModal()}
+                >
+                  New Folder
+                </Button>
+              ) : null}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {filteredColumns.map(({ col, links: colLinks, idx }) => (
+                <FolderAccordion
+                  key={col.id}
+                  folder={col}
+                  index={idx}
+                  links={colLinks}
+                  isOpen={searchLower ? true : openFolders.has(col.id)}
+                  onToggle={toggleFolder}
+                  onAddLink={(id) => useDashboardUI.getState().openLinkModal(id)}
+                  onEditFolder={openEditFolderModal}
+                  onEditLink={openEditLinkModal}
+                  onDeleteLink={handleDeleteLink}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <AddLinkModal
+        open={linkModalOpen}
+        onOpenChange={(o) => !o && closeLinkModal()}
+        editingId={editingLinkId}
+        preferredColumnId={preferredColumnId}
+        onRequestEditReset={closeLinkModal}
+      />
+      <AddFolderModal
+        open={folderModalOpen}
+        onOpenChange={(o) => !o && closeFolderModal()}
+        editingId={editingFolderId}
+        onRequestEditReset={closeFolderModal}
+        onCreated={handleFolderCreated}
+      />
+      {ConfirmDialogElement}
+    </main>
+  );
+}
+</file>
+
+<file path="src/features/dashboard/themes.ts">
+import type { FolderColor } from "@/types/workspace";
+
+export const COLOR_CYCLE: FolderColor[] = [
+  "amber",
+  "emerald",
+  "violet",
+  "rose",
+  "cyan",
+  "blue",
+];
+
+const ACCENT: Record<FolderColor, string> = {
+  amber: "bg-amber-500",
+  emerald: "bg-emerald-500",
+  violet: "bg-violet-500",
+  rose: "bg-rose-500",
+  cyan: "bg-cyan-500",
+  blue: "bg-blue-500",
+};
+
+export function folderAccent(
+  color: FolderColor | undefined,
+  index: number,
+): string {
+  const c = color ?? COLOR_CYCLE[index % COLOR_CYCLE.length] ?? "amber";
+  return ACCENT[c];
+}
+</file>
+
+<file path="src/features/settings/useBackup.ts">
+import { useCallback } from "react";
+import { useWorkspaceStore } from "@/stores/workspaceStore";
+import type { Workspace } from "@/types/workspace";
+
+function isWorkspace(value: unknown): value is Workspace {
+  if (!value || typeof value !== "object") return false;
+  const w = value as Partial<Workspace>;
+  return Array.isArray(w.columns) && Array.isArray(w.links);
+}
+
+export function useBackup() {
+  const workspace = useWorkspaceStore((s) => s.workspace);
+  const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
+
+  const exportBackup = useCallback(() => {
+    const blob = new Blob([JSON.stringify(workspace, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `launchpad-backup-${new Date()
+      .toISOString()
+      .slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, [workspace]);
+
+  const importBackup = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        try {
+          const parsed = JSON.parse(String(evt.target?.result ?? ""));
+          if (isWorkspace(parsed)) {
+            const next: Workspace = {
+              settings: parsed.settings ?? { title: "Reset Launchpad" },
+              columns: parsed.columns,
+              links: parsed.links,
+              todos: Array.isArray(parsed.todos) ? parsed.todos : [],
+            };
+            setWorkspace(next);
+          }
+        } catch (err) {
+          console.error("Invalid JSON backup:", err);
+        } finally {
+          event.target.value = "";
+        }
+      };
+      reader.readAsText(file);
+    },
+    [setWorkspace],
+  );
+
+  return { exportBackup, importBackup };
+}
+</file>
+
+<file path="src/features/theme/ThemeProvider.tsx">
+import { type ReactNode } from "react";
+import { useTheme } from "./useTheme";
+
+interface ThemeProviderProps {
+  children: ReactNode;
+}
+
+export function ThemeProvider({ children }: ThemeProviderProps) {
+  useTheme();
+  return <>{children}</>;
+}
+</file>
+
+<file path="src/features/theme/ThemeToggle.tsx">
+import { Moon, Sun } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useTheme } from "./useTheme";
+
+export function ThemeToggle() {
+  const { toggleTheme } = useTheme();
+  return (
+    <Button
+      onClick={toggleTheme}
+      variant="ghost"
+      size="icon"
+      title="Toggle theme"
+    >
+      <Sun className="h-4 w-4 hidden dark:block" />
+      <Moon className="h-4 w-4 block dark:hidden" />
+    </Button>
+  );
+}
+</file>
+
+<file path="src/features/theme/useTheme.ts">
+import { useCallback, useEffect } from "react";
+
+const STORAGE_KEY = "theme";
+type Theme = "light" | "dark";
+
+function getInitialTheme(): Theme {
+  if (typeof window === "undefined") return "dark";
+  const stored = localStorage.getItem(STORAGE_KEY);
+  return stored === "light" ? "light" : "dark";
+}
+
+function applyTheme(theme: Theme) {
+  const root = document.documentElement;
+  if (theme === "dark") {
+    root.classList.add("dark");
+  } else {
+    root.classList.remove("dark");
+  }
+}
+
+export function useTheme() {
+  useEffect(() => {
+    applyTheme(getInitialTheme());
+  }, []);
+
+  const toggleTheme = useCallback(() => {
+    const isDark = document.documentElement.classList.contains("dark");
+    const next: Theme = isDark ? "light" : "dark";
+    applyTheme(next);
+    localStorage.setItem(STORAGE_KEY, next);
+  }, []);
+
+  return { toggleTheme };
+}
+</file>
+
+<file path="src/features/todos/TodoSection.tsx">
+import { type FormEvent, useState } from "react";
+import {
+  ArrowRight,
+  Bell,
+  Check,
+  ListTodo,
+  Pencil,
+  Plus,
+  Trash2,
+  X,
+} from "lucide-react";
+import { ensureReminderPermission, useTodos } from "./useTodos";
+import {
+  formatDateLabel,
+  formatWeekday,
+  getTodayDate,
+  getWeekDays,
+  addDays,
+} from "@/lib/date";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import type { TaskPriority, TodoItem } from "@/types/workspace";
+
+type WeekTab = "this" | "next";
+
+const PRIORITIES: { id: TaskPriority; label: string; activeStyle: string }[] = [
+  { id: "low", label: "Low", activeStyle: "bg-emerald-500 text-white font-bold border-emerald-600 shadow-sm" },
+  { id: "medium", label: "Med", activeStyle: "bg-amber-500 text-slate-950 font-bold border-amber-600 shadow-sm" },
+  { id: "high", label: "High", activeStyle: "bg-rose-500 text-white font-bold border-rose-600 shadow-sm" },
+];
+
+export function TodoSection({ searchTerm = "" }: { searchTerm?: string }) {
+  const { thisWeek, nextWeek, add, update, toggle, remove, moveToNextWeek } =
+    useTodos();
+  const weekDays = getWeekDays();
+  const today = getTodayDate();
+
+  const [tab, setTab] = useState<WeekTab>("this");
+  const [draft, setDraft] = useState("");
+  const [priority, setPriority] = useState<TaskPriority>("medium");
+  const [reminder, setReminder] = useState(false);
+  const [remindDate, setRemindDate] = useState(today);
+  const [remindTime, setRemindTime] = useState("09:00");
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const rawItems = tab === "this" ? thisWeek : nextWeek;
+  const items = searchTerm.trim()
+    ? rawItems.filter((t) => t.text.toLowerCase().includes(searchTerm.toLowerCase().trim()))
+    : rawItems;
+
+  const handleReminderToggle = async (checked: boolean) => {
+    if (!checked) {
+      setReminder(false);
+      return;
+    }
+    const perm = await ensureReminderPermission();
+    if (perm === "granted") {
+      setReminder(true);
+      setRemindDate(today);
+    } else {
+      alert("Please enable notification permissions in your browser to set task reminders.");
+      setReminder(false);
+    }
+  };
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    const trimmed = draft.trim();
+    if (!trimmed) return;
+
+    add({
+      text: trimmed,
+      dueDate: reminder ? remindDate : tab === "this" ? today : addDays(today, 7),
+      dueTime: reminder ? remindTime : undefined,
+      reminder,
+      priority,
+    });
+
+    setDraft("");
+    setReminder(false);
+  };
+
+  return (
+    <section className="rounded-2xl border border-border bg-card/70 backdrop-blur-xl shadow-sm overflow-hidden flex flex-col">
+      {/* Header with clear Tab Switching */}
+      <div className="px-4 py-3.5 flex items-center justify-between border-b border-border bg-muted/20">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold">
+            <ListTodo className="h-4 w-4" />
+          </div>
+          <div>
+            <h2 className="font-bold text-sm text-foreground">Tasks</h2>
+            <p className="text-[11px] text-muted-foreground">{formatDateLabel()}</p>
+          </div>
+        </div>
+
+        <div className="flex rounded-xl bg-muted p-1 text-xs font-semibold gap-1">
+          <button
+            type="button"
+            onClick={() => setTab("this")}
+            className={cn(
+              "px-3 py-1.5 rounded-lg transition-all",
+              tab === "this"
+                ? "bg-background text-foreground shadow-sm font-bold"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            This Week
+            <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-primary/10 text-primary font-bold">
+              {thisWeek.filter((t) => !t.done).length}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("next")}
+            className={cn(
+              "px-3 py-1.5 rounded-lg transition-all",
+              tab === "next"
+                ? "bg-background text-foreground shadow-sm font-bold"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            Next Week
+            <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-primary/10 text-primary font-bold">
+              {nextWeek.filter((t) => !t.done).length}
+            </span>
+          </button>
+        </div>
+      </div>
+
+      {/* Task Creation Form */}
+      <form onSubmit={handleSubmit} className="p-3.5 border-b border-border bg-background/50 space-y-3">
+        <div className="flex items-center gap-2">
+          <Input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="Add a new task..."
+            className="h-10 bg-card border-border rounded-xl text-xs sm:text-sm font-medium focus-visible:ring-primary"
+          />
+          <Button
+            type="submit"
+            size="sm"
+            disabled={!draft.trim()}
+            className="h-10 px-4 rounded-xl font-bold bg-primary text-primary-foreground hover:opacity-90 shadow-md shadow-primary/20 shrink-0"
+          >
+            <Plus className="h-4 w-4 mr-1" />
+            Add
+          </Button>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
+          {/* Priority Selection Pills */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] font-semibold text-muted-foreground mr-1">Priority:</span>
+            {PRIORITIES.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setPriority(p.id)}
+                className={cn(
+                  "px-3 py-1 rounded-lg border text-[11px] font-semibold transition-all",
+                  priority === p.id
+                    ? p.activeStyle
+                    : "border-border bg-card text-muted-foreground hover:text-foreground hover:bg-muted",
+                )}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Reminder Toggle Button */}
+          <button
+            type="button"
+            onClick={() => void handleReminderToggle(!reminder)}
+            className={cn(
+              "px-3 py-1 rounded-lg border text-xs font-semibold flex items-center gap-1.5 transition-all",
+              reminder
+                ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                : "border-border bg-card text-muted-foreground hover:text-foreground hover:bg-muted",
+            )}
+          >
+            <Bell className="h-3.5 w-3.5" />
+            <span>{reminder ? "Reminder Active" : "Set Reminder"}</span>
+          </button>
+        </div>
+
+        {/* Synced Reminder Settings */}
+        {reminder && (
+          <div className="p-3 rounded-xl bg-card border border-primary/30 flex flex-wrap items-center gap-2.5 text-xs">
+            <div className="flex items-center gap-1 text-muted-foreground font-medium text-[11px]">
+              <span>Notify on:</span>
+            </div>
+            <select
+              value={remindDate}
+              onChange={(e) => setRemindDate(e.target.value)}
+              className="h-8 px-2.5 rounded-lg bg-background border border-border text-xs text-foreground font-medium outline-none focus:ring-1 focus:ring-primary"
+            >
+              {weekDays.map((d) => (
+                <option key={d.date} value={d.date}>
+                  {d.label}
+                </option>
+              ))}
+            </select>
+
+            <input
+              type="date"
+              value={remindDate}
+              onChange={(e) => setRemindDate(e.target.value)}
+              className="h-8 px-2.5 rounded-lg bg-background border border-border text-xs text-foreground font-medium outline-none focus:ring-1 focus:ring-primary"
+            />
+
+            <input
+              type="time"
+              value={remindTime}
+              onChange={(e) => setRemindTime(e.target.value)}
+              className="h-8 px-2 rounded-lg bg-background border border-border text-xs text-foreground font-medium outline-none focus:ring-1 focus:ring-primary"
+            />
+          </div>
+        )}
+      </form>
+
+      {/* Task List */}
+      <ul className="p-3 space-y-2 flex-1 min-h-[160px] overflow-y-auto">
+        {items.length === 0 ? (
+          <li className="py-12 text-center text-xs text-muted-foreground">
+            {searchTerm.trim()
+              ? "No tasks match your search."
+              : `No tasks scheduled for ${tab === "this" ? "this week" : "next week"}.`}
+          </li>
+        ) : (
+          items.map((task) =>
+            editingId === task.id ? (
+              <TodoEditRow
+                key={task.id}
+                task={task}
+                weekDays={weekDays}
+                onCancel={() => setEditingId(null)}
+                onSave={(patch) => {
+                  update(task.id, patch);
+                  setEditingId(null);
+                }}
+              />
+            ) : (
+              <TodoItemRow
+                key={task.id}
+                task={task}
+                showMove={tab === "this" && !task.done}
+                onEdit={() => setEditingId(task.id)}
+                onToggle={() => toggle(task.id)}
+                onDelete={() => remove(task.id)}
+                onMove={() => moveToNextWeek(task.id)}
+              />
+            ),
+          )
+        )}
+      </ul>
+    </section>
+  );
+}
+
+function TodoEditRow({
+  task,
+  weekDays,
+  onCancel,
+  onSave,
+}: {
+  task: TodoItem;
+  weekDays: { date: string; label: string }[];
+  onCancel: () => void;
+  onSave: (patch: {
+    text: string;
+    priority: TaskPriority;
+    reminder: boolean;
+    dueDate?: string;
+    dueTime?: string;
+  }) => void;
+}) {
+  const [text, setText] = useState(task.text);
+  const [priority, setPriority] = useState<TaskPriority>(task.priority ?? "medium");
+  const [reminder, setReminder] = useState(Boolean(task.reminder));
+  const [dueDate, setDueDate] = useState(task.dueDate ?? getTodayDate());
+  const [dueTime, setDueTime] = useState(task.dueTime ?? "09:00");
+
+  return (
+    <li className="p-3.5 rounded-xl border border-primary/50 bg-card shadow-md space-y-3">
+      <Input
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        maxLength={180}
+        autoFocus
+        className="h-10 text-xs sm:text-sm font-medium"
+      />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5">
+          {PRIORITIES.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => setPriority(p.id)}
+              className={cn(
+                "px-2.5 py-1 rounded-md border text-[10px] font-bold",
+                priority === p.id
+                  ? p.activeStyle
+                  : "border-border bg-muted/60 text-muted-foreground",
+              )}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Button type="button" size="sm" variant="ghost" onClick={onCancel} className="h-8 px-3 rounded-lg text-xs">
+            <X className="h-3.5 w-3.5 mr-1" />
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            disabled={!text.trim()}
+            className="h-8 px-4 text-xs font-bold rounded-lg"
+            onClick={() =>
+              onSave({
+                text,
+                priority,
+                reminder,
+                dueDate: reminder ? dueDate : task.dueDate,
+                dueTime: reminder ? dueTime : undefined,
+              })
+            }
+          >
+            Save Changes
+          </Button>
+        </div>
+      </div>
+    </li>
+  );
+}
+
+function TodoItemRow({
+  task,
+  showMove,
+  onEdit,
+  onToggle,
+  onDelete,
+  onMove,
+}: {
+  task: TodoItem;
+  showMove: boolean;
+  onEdit: () => void;
+  onToggle: () => void;
+  onDelete: () => void;
+  onMove: () => void;
+}) {
+  const priorityColor =
+    task.priority === "high"
+      ? "text-rose-500 bg-rose-500/10 border-rose-500/30"
+      : task.priority === "medium"
+        ? "text-amber-500 bg-amber-500/10 border-amber-500/30"
+        : "text-emerald-500 bg-emerald-500/10 border-emerald-500/30";
+
+  return (
+    <li
+      className={cn(
+        "group flex items-center justify-between gap-3 p-3 rounded-xl border border-border bg-card/80 hover:bg-card hover:border-primary/40 transition-all shadow-sm",
+        task.done && "opacity-50 bg-muted/30 border-transparent",
+      )}
+    >
+      <div className="flex items-center gap-3 min-w-0 flex-1">
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-label={task.done ? "Mark incomplete" : "Complete"}
+          className={cn(
+            "w-5 h-5 rounded-lg border-2 flex items-center justify-center flex-shrink-0 transition-colors cursor-pointer",
+            task.done
+              ? "bg-emerald-500 border-emerald-500 text-white"
+              : "border-muted-foreground/40 hover:border-primary bg-background",
+          )}
+        >
+          {task.done && <Check className="h-3 w-3 stroke-[3]" />}
+        </button>
+
+        <div className="min-w-0 flex-1">
+          <p
+            className={cn(
+              "text-xs sm:text-sm font-semibold leading-snug truncate",
+              task.done ? "line-through text-muted-foreground" : "text-foreground",
+            )}
+          >
+            {task.text}
+          </p>
+          <div className="flex items-center gap-2 mt-1">
+            {task.priority && (
+              <span
+                className={cn(
+                  "px-2 py-0.2 rounded-md border text-[10px] font-bold uppercase tracking-wider",
+                  priorityColor,
+                )}
+              >
+                {task.priority}
+              </span>
+            )}
+            {task.reminder && task.dueDate && (
+              <span className="flex items-center gap-1 text-[11px] text-muted-foreground font-medium">
+                <Bell className="h-3 w-3 text-primary" />
+                {formatWeekday(task.dueDate)} · {task.dueTime || "09:00"}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Touch-accessible Action Buttons */}
+      <div className="flex items-center gap-1">
+        {!task.done && (
+          <button
+            type="button"
+            onClick={onEdit}
+            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            title="Edit task"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+        )}
+        {showMove && (
+          <button
+            type="button"
+            onClick={onMove}
+            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            title="Move to next week"
+          >
+            <ArrowRight className="h-3.5 w-3.5" />
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={onDelete}
+          className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+          title="Delete task"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </li>
+  );
+}
+</file>
+
+<file path="src/features/todos/useTodos.ts">
+import { useCallback, useEffect, useMemo } from "react";
+import { useWorkspaceStore, selectTodos } from "@/stores/workspaceStore";
+import { addDays, getTodayDate, getWeekEnd, getWeekStart } from "@/lib/date";
+import type { TodoItem, TaskPriority } from "@/types/workspace";
+
+function nextId(prefix: string): string {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+const reminderTimers: Record<string, number> = {};
+
+function notificationSupported(): boolean {
+  return typeof window !== "undefined" && "Notification" in window;
+}
+
+export async function ensureReminderPermission(): Promise<NotificationPermission | "unsupported"> {
+  if (!notificationSupported()) return "unsupported";
+  if (Notification.permission === "granted" || Notification.permission === "denied") {
+    return Notification.permission;
+  }
+  return Notification.requestPermission();
+}
+
+function clearReminder(id: string) {
+  if (reminderTimers[id]) {
+    clearTimeout(reminderTimers[id]);
+    delete reminderTimers[id];
+  }
+}
+
+function scheduleReminder(task: TodoItem) {
+  clearReminder(task.id);
+  if (!task.reminder || !task.dueDate || task.done) return;
+  if (!notificationSupported() || Notification.permission !== "granted") return;
+
+  const due = new Date(`${task.dueDate}T${task.dueTime || "09:00"}`);
+  const delay = due.getTime() - Date.now();
+  if (delay <= 0) return;
+
+  reminderTimers[task.id] = window.setTimeout(() => {
+    new Notification(task.text, {
+      body: `Reminder · ${task.dueTime || "09:00"}`,
+      icon: "/favicon.svg",
+    });
+    delete reminderTimers[task.id];
+  }, Math.min(delay, 2147483647));
+}
+
+export type TodoPatch = Partial<
+  Pick<TodoItem, "text" | "dueDate" | "dueTime" | "reminder" | "priority" | "done">
+>;
+
+export function useTodos() {
+  const todos = useWorkspaceStore(selectTodos);
+  const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
+  const weekEnd = getWeekEnd();
+
+  const add = useCallback(
+    (input: {
+      text: string;
+      dueDate?: string;
+      dueTime?: string;
+      reminder?: boolean;
+      priority: TaskPriority;
+    }) => {
+      const trimmed = input.text.trim();
+      if (!trimmed) return;
+      if (!input.priority) return;
+      const next: TodoItem = {
+        id: nextId("todo"),
+        text: trimmed,
+        done: false,
+        dueDate: input.dueDate ?? getTodayDate(),
+        dueTime: input.reminder ? input.dueTime || "09:00" : undefined,
+        reminder: Boolean(input.reminder),
+        priority: input.priority,
+        date: getTodayDate(),
+      };
+      setWorkspace((prev) => ({ ...prev, todos: [...prev.todos, next] }));
+      if (next.reminder) scheduleReminder(next);
+    },
+    [setWorkspace],
+  );
+
+  const update = useCallback(
+    (id: string, patch: TodoPatch) => {
+      setWorkspace((prev) => ({
+        ...prev,
+        todos: prev.todos.map((t) => {
+          if (t.id !== id) return t;
+          const next = { ...t, ...patch };
+          if (patch.text !== undefined) next.text = patch.text.trim() || t.text;
+          if (!next.reminder) {
+            next.dueTime = undefined;
+            clearReminder(id);
+          } else {
+            next.dueTime = next.dueTime || "09:00";
+            next.dueDate = next.dueDate ?? getTodayDate();
+            scheduleReminder(next);
+          }
+          return next;
+        }),
+      }));
+    },
+    [setWorkspace],
+  );
+
+  const toggle = useCallback(
+    (id: string) => {
+      setWorkspace((prev) => ({
+        ...prev,
+        todos: prev.todos.map((t) => {
+          if (t.id !== id) return t;
+          const next = { ...t, done: !t.done, date: getTodayDate() };
+          if (next.done) clearReminder(id);
+          else if (next.reminder) scheduleReminder(next);
+          return next;
+        }),
+      }));
+    },
+    [setWorkspace],
+  );
+
+  const remove = useCallback(
+    (id: string) => {
+      clearReminder(id);
+      setWorkspace((prev) => ({
+        ...prev,
+        todos: prev.todos.filter((t) => t.id !== id),
+      }));
+    },
+    [setWorkspace],
+  );
+
+  const moveToNextWeek = useCallback(
+    (id: string) => {
+      setWorkspace((prev) => ({
+        ...prev,
+        todos: prev.todos.map((t) => {
+          if (t.id !== id) return t;
+          const base = t.dueDate ?? getTodayDate();
+          const nextDate = base > weekEnd ? addDays(base, 7) : addDays(weekEnd, 1);
+          const next = { ...t, dueDate: nextDate };
+          if (next.reminder) scheduleReminder(next);
+          return next;
+        }),
+      }));
+    },
+    [setWorkspace, weekEnd],
+  );
+
+  const { thisWeek, nextWeek } = useMemo(() => {
+    const thisList: TodoItem[] = [];
+    const nextList: TodoItem[] = [];
+    todos.forEach((t) => {
+      if (!t.dueDate || t.dueDate <= weekEnd) thisList.push(t);
+      else nextList.push(t);
+    });
+    const sortTasks = (list: TodoItem[]) =>
+      [...list].sort((a, b) => Number(a.done) - Number(b.done));
+    return { thisWeek: sortTasks(thisList), nextWeek: sortTasks(nextList) };
+  }, [todos, weekEnd]);
+
+  useEffect(() => {
+    const weekStart = getWeekStart();
+    const nextWeekStart = addDays(getWeekEnd(), 1);
+    let changed = false;
+    const rolled = todos.map((t) => {
+      if (t.done) return t;
+      const due = t.dueDate ?? t.date;
+      if (!due || due >= weekStart) return t;
+      changed = true;
+      const next = { ...t, dueDate: nextWeekStart };
+      if (next.reminder) scheduleReminder(next);
+      return next;
+    });
+    if (changed) {
+      setWorkspace((prev) => ({ ...prev, todos: rolled }));
+      return;
+    }
+    todos.forEach((t) => {
+      if (t.reminder && !t.done) scheduleReminder(t);
+    });
+  }, [todos, setWorkspace]);
+
+  return {
+    thisWeek,
+    nextWeek,
+    add,
+    update,
+    toggle,
+    remove,
+    moveToNextWeek,
+  };
+}
+</file>
+
+<file path="src/lib/date.ts">
+export function getTodayDate(now: Date = new Date()): string {
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+export function getWeekStart(now: Date = new Date()): string {
+  const d = new Date(now);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  d.setDate(diff);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
+
+export function getWeekEnd(now: Date = new Date()): string {
+  const start = new Date(getWeekStart(now));
+  start.setDate(start.getDate() + 6);
+  const y = start.getFullYear();
+  const m = String(start.getMonth() + 1).padStart(2, "0");
+  const d = String(start.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+export function addDays(dateStr: string, days: number): string {
+  const d = new Date(`${dateStr}T00:00:00`);
+  d.setDate(d.getDate() + days);
+  return getTodayDate(d);
+}
+
+export function formatDateLabel(date: Date = new Date()): string {
+  return date.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+export function formatWeekday(dateStr: string): string {
+  const d = new Date(`${dateStr}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return dateStr;
+  return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+}
+
+export function getWeekDays(now: Date = new Date()): { date: string; label: string }[] {
+  const start = getWeekStart(now);
+  return Array.from({ length: 7 }, (_, i) => {
+    const date = addDays(start, i);
+    return { date, label: formatWeekday(date) };
+  });
+}
+
+export function tryGetDomain(url: string): string {
+  try {
+    const u = new URL(url.startsWith("http") ? url : `https://${url}`);
+    return u.hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+</file>
+
+<file path="src/lib/utils.ts">
+import { type ClassValue, clsx } from "clsx";
+import { twMerge } from "tailwind-merge";
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
+</file>
+
+<file path="src/pages/NotFoundPage.tsx">
+import { Link } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
+import { Button } from "@/components/ui/button";
+
+export function NotFoundPage() {
+  return (
+    <main className="flex-1 max-w-5xl mx-auto w-full p-6 flex flex-col items-center justify-center text-center gap-3">
+      <h1 className="text-2xl font-semibold tracking-tight">Page not found</h1>
+      <p className="text-sm text-muted-foreground max-w-sm">
+        That page doesn’t exist or has been moved.
+      </p>
+      <Button asChild>
+        <Link to="/">
+          <ArrowLeft className="h-4 w-4" />
+          Back to Dashboard
+        </Link>
+      </Button>
+    </main>
+  );
+}
+</file>
+
+<file path="src/pages/SettingsPage.tsx">
+import { Download, Upload } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { useBackup } from "@/features/settings/useBackup";
+import { useWorkspaceStore } from "@/stores/workspaceStore";
+
+export function SettingsPage() {
+  const { exportBackup, importBackup } = useBackup();
+  const user = useWorkspaceStore((s) => s.user);
+  const folderCount = useWorkspaceStore((s) => s.workspace.columns.length);
+  const linkCount = useWorkspaceStore((s) => s.workspace.links.length);
+  const todoCount = useWorkspaceStore((s) => s.workspace.todos.length);
+
+  return (
+    <main className="flex-1 max-w-3xl mx-auto w-full p-4 sm:p-6 flex flex-col gap-6 pb-20 lg:pb-8">
+      <header className="flex flex-col gap-1">
+        <h1 className="text-lg font-semibold tracking-tight">Settings</h1>
+        <p className="text-sm text-muted-foreground">
+          Signed in as {user?.email ?? "anonymous"}
+        </p>
+      </header>
+
+      <Card className="p-5 space-y-3">
+        <h2 className="font-medium text-sm">Workspace overview</h2>
+        <div className="grid grid-cols-3 gap-3 text-center">
+          <Stat label="Folders" value={folderCount} />
+          <Stat label="Links" value={linkCount} />
+          <Stat label="Todos" value={todoCount} />
+        </div>
+      </Card>
+
+      <Card className="p-5 space-y-3">
+        <h2 className="font-medium text-sm">Backup & restore</h2>
+        <p className="text-sm text-muted-foreground">
+          Export your workspace as JSON, or import a previous backup. Imports
+          overwrite the current workspace and sync to the cloud.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={exportBackup} variant="default">
+            <Download className="h-3.5 w-3.5" />
+            Export Backup
+          </Button>
+          <Button asChild variant="secondary">
+            <label className="cursor-pointer">
+              <Upload className="h-3.5 w-3.5" />
+              Import Backup
+              <input
+                type="file"
+                accept=".json"
+                onChange={importBackup}
+                className="hidden"
+              />
+            </label>
+          </Button>
+        </div>
+      </Card>
+    </main>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-md bg-muted border border-border p-3">
+      <div className="text-xl font-semibold">{value}</div>
+      <div className="text-[11px] text-muted-foreground">{label}</div>
+    </div>
+  );
+}
+</file>
+
+<file path="src/services/firebase/app.ts">
+import { getApps, initializeApp, type FirebaseApp } from "firebase/app";
+import { getAuth, type Auth } from "firebase/auth";
+import { getFirestore, type Firestore } from "firebase/firestore";
+import { FIREBASE_CONFIG } from "./config";
+
+let _app: FirebaseApp | null = null;
+let _auth: Auth | null = null;
+let _db: Firestore | null = null;
+
+function ensureApp(): FirebaseApp {
+  if (_app) return _app;
+  const existing = getApps()[0];
+  _app = existing ?? initializeApp(FIREBASE_CONFIG);
+  return _app;
+}
+
+export function firebaseApp(): FirebaseApp {
+  return ensureApp();
+}
+
+export function auth(): Auth {
+  if (_auth) return _auth;
+  _auth = getAuth(ensureApp());
+  return _auth;
+}
+
+export function db(): Firestore {
+  if (_db) return _db;
+  _db = getFirestore(ensureApp());
+  return _db;
+}
+</file>
+
+<file path="src/services/firebase/auth.ts">
+import {
+  GoogleAuthProvider,
+  onAuthStateChanged,
+  signInWithPopup,
+  signOut,
+  type User,
+} from "firebase/auth";
+import { auth as getAuthInstance } from "./app";
+import type { AppUser } from "@/types/auth";
+
+const googleProvider = new GoogleAuthProvider();
+
+function toAppUser(user: User): AppUser {
+  return {
+    uid: user.uid,
+    email: user.email,
+    displayName: user.displayName,
+    photoURL: user.photoURL,
+  };
+}
+
+export async function signInWithGoogle(): Promise<void> {
+  const a = getAuthInstance();
+  await signInWithPopup(a, googleProvider);
+}
+
+export async function signOutCurrent(): Promise<void> {
+  const a = getAuthInstance();
+  await signOut(a);
+}
+
+export function subscribeAuth(
+  onUser: (user: AppUser | null) => void,
+  onError?: (err: Error) => void,
+): () => void {
+  const a = getAuthInstance();
+  return onAuthStateChanged(
+    a,
+    (user) => onUser(user ? toAppUser(user) : null),
+    onError,
+  );
+}
+</file>
+
+<file path="src/services/firebase/config.ts">
+import type { FirebaseOptions } from "firebase/app";
+
+const env = import.meta.env;
+
+export const FIREBASE_CONFIG: FirebaseOptions = {
+  apiKey: env.VITE_FIREBASE_API_KEY ?? "AIzaSyBMGA15NjP9m_4LkXG8Pr9HMG0conyCfQ4",
+  authDomain:
+    env.VITE_FIREBASE_AUTH_DOMAIN ?? "launchpad-41d1e.firebaseapp.com",
+  projectId: env.VITE_FIREBASE_PROJECT_ID ?? "launchpad-41d1e",
+  storageBucket:
+    env.VITE_FIREBASE_STORAGE_BUCKET ?? "launchpad-41d1e.firebasestorage.app",
+  messagingSenderId:
+    env.VITE_FIREBASE_MESSAGING_SENDER_ID ?? "819649466375",
+  appId: env.VITE_FIREBASE_APP_ID ?? "1:819649466375:web:181be4f5851b6895925aa2",
+  measurementId: env.VITE_FIREBASE_MEASUREMENT_ID ?? "G-949M4L5YYS",
+};
+
+export const APP_ID = env.VITE_APP_ID ?? "reset-launchpad-app";
+</file>
+
+<file path="src/services/firebase/workspace.ts">
+import { doc, onSnapshot, setDoc, type Unsubscribe } from "firebase/firestore";
+import { db as getDb } from "./app";
+import { APP_ID } from "./config";
+import type { Workspace } from "@/types/workspace";
+
+function userDocRef(uid: string) {
+  return doc(getDb(), "artifacts", APP_ID, "users", uid, "data", "state");
+}
+
+/**
+ * Removes any undefined properties so Firestore setDoc() never throws
+ */
+function sanitizeForFirestore<T>(data: T): T {
+  return JSON.parse(JSON.stringify(data));
+}
+
+export interface WorkspaceSubscriptionCallbacks {
+  onData: (workspace: Workspace) => void;
+  onReady?: () => void;
+  onError?: (err: Error) => void;
+}
+
+export function subscribeWorkspace(
+  uid: string,
+  callbacks: WorkspaceSubscriptionCallbacks,
+): Unsubscribe {
+  return onSnapshot(
+    userDocRef(uid),
+    (snapshot) => {
+      callbacks.onReady?.();
+      if (!snapshot.exists()) return;
+      const data = snapshot.data() as Partial<Workspace> | undefined;
+      if (!data || !Array.isArray(data.columns) || data.columns.length === 0) {
+        return;
+      }
+      callbacks.onData({
+        settings: data.settings ?? { title: "Reset Launchpad" },
+        columns: data.columns,
+        links: Array.isArray(data.links) ? data.links : [],
+        todos: Array.isArray(data.todos) ? data.todos : [],
+      });
+    },
+    (err) => callbacks.onError?.(err),
+  );
+}
+
+export async function persistWorkspace(
+  uid: string,
+  workspace: Workspace,
+): Promise<void> {
+  const cleanData = sanitizeForFirestore(workspace);
+  await setDoc(userDocRef(uid), cleanData);
+}
+</file>
+
+<file path="src/shared/api/errors.ts">
+export type AppErrorCode =
+  | "unauthenticated"
+  | "permission"
+  | "not_found"
+  | "unavailable"
+  | "unknown";
+
+export interface AppError {
+  code: AppErrorCode;
+  message: string;
+  cause?: unknown;
+}
+
+export function isAppError(value: unknown): value is AppError {
+  if (!value || typeof value !== "object") return false;
+  const rec = value as Record<string, unknown>;
+  return (
+    typeof rec.code === "string" &&
+    typeof rec.message === "string" &&
+    (rec.code === "unauthenticated" ||
+      rec.code === "permission" ||
+      rec.code === "not_found" ||
+      rec.code === "unavailable" ||
+      rec.code === "unknown")
+  );
+}
+
+function getVendorCode(err: unknown): string | undefined {
+  if (typeof err !== "object" || err === null || !("code" in err)) {
+    return undefined;
+  }
+  const code = (err as { code: unknown }).code;
+  return typeof code === "string" ? code : undefined;
+}
+
+function mapCode(vendorCode: string | undefined, message: string): AppErrorCode {
+  const haystack = `${vendorCode ?? ""} ${message}`.toLowerCase();
+  if (
+    haystack.includes("unauthenticated") ||
+    haystack.includes("auth/") ||
+    haystack.includes("signed out")
+  ) {
+    return "unauthenticated";
+  }
+  if (
+    haystack.includes("permission-denied") ||
+    haystack.includes("permission") ||
+    haystack.includes("forbidden")
+  ) {
+    return "permission";
+  }
+  if (haystack.includes("not-found") || haystack.includes("not found")) {
+    return "not_found";
+  }
+  if (
+    haystack.includes("unavailable") ||
+    haystack.includes("network") ||
+    haystack.includes("offline")
+  ) {
+    return "unavailable";
+  }
+  return "unknown";
+}
+
+export function toAppError(err: unknown): AppError {
+  if (isAppError(err)) return err;
+  const message = err instanceof Error ? err.message : String(err);
+  return {
+    code: mapCode(getVendorCode(err), message),
+    message,
+    cause: err,
+  };
+}
+
+export function formatAppError(prefix: string, err: unknown): string {
+  const mapped = toAppError(err);
+  return `${prefix}: ${mapped.message}`;
+}
+</file>
+
+<file path="src/stores/dashboardUIStore.ts">
+import { create } from "zustand";
+
+export type MobileTab = "tasks" | "launchpad";
+
+interface DashboardUIState {
+  activeTab: MobileTab;
+  setActiveTab: (tab: MobileTab) => void;
+  linkModalOpen: boolean;
+  folderModalOpen: boolean;
+  editingLinkId: string | null;
+  editingFolderId: string | null;
+  preferredColumnId: string | null;
+  openLinkModal: (preferredColumnId?: string | null) => void;
+  openEditLinkModal: (id: string) => void;
+  openFolderModal: () => void;
+  openEditFolderModal: (id: string) => void;
+  closeLinkModal: () => void;
+  closeFolderModal: () => void;
+  reset: () => void;
+}
+
+export const useDashboardUI = create<DashboardUIState>((set) => ({
+  activeTab: "tasks", // Tasks is default
+  setActiveTab: (activeTab) => set({ activeTab }),
+  linkModalOpen: false,
+  folderModalOpen: false,
+  editingLinkId: null,
+  editingFolderId: null,
+  preferredColumnId: null,
+  openLinkModal: (preferredColumnId = null) =>
+    set({
+      linkModalOpen: true,
+      editingLinkId: null,
+      preferredColumnId,
+    }),
+  openEditLinkModal: (id) =>
+    set({ linkModalOpen: true, editingLinkId: id }),
+  openFolderModal: () => set({ folderModalOpen: true, editingFolderId: null }),
+  openEditFolderModal: (id) =>
+    set({ folderModalOpen: true, editingFolderId: id }),
+  closeLinkModal: () => set({ linkModalOpen: false, editingLinkId: null }),
+  closeFolderModal: () => set({ folderModalOpen: false, editingFolderId: null }),
+  reset: () =>
+    set({
+      activeTab: "tasks",
+      linkModalOpen: false,
+      folderModalOpen: false,
+      editingLinkId: null,
+      editingFolderId: null,
+      preferredColumnId: null,
+    }),
+}));
+</file>
+
+<file path="src/stores/workspaceStore.ts">
+import { create, type StateCreator } from "zustand";
+import {
+  type Workspace,
+  type LinkItem,
+  type Folder,
+  type TodoItem,
+  cloneDefaultWorkspace,
+} from "@/types/workspace";
+import type { AppUser, SyncState } from "@/types/auth";
+import {
+  DEFAULT_ORG,
+  sessionFromUser,
+  type Organization,
+  type OrgRole,
+} from "@/domain/org";
+
+interface WorkspaceStore {
+  workspace: Workspace;
+  user: AppUser | null;
+  org: Organization;
+  role: OrgRole;
+  sync: SyncState;
+  setWorkspace: (
+    workspace: Workspace | ((prev: Workspace) => Workspace),
+  ) => void;
+  setUser: (user: AppUser | null) => void;
+  setSync: (sync: SyncState) => void;
+  resetWorkspace: () => void;
+}
+
+const creator: StateCreator<WorkspaceStore> = (set) => ({
+  workspace: cloneDefaultWorkspace(),
+  user: null,
+  org: DEFAULT_ORG,
+  role: "viewer",
+  sync: { status: "offline", message: "Connecting..." },
+  setWorkspace: (workspace) =>
+    set((state) => {
+      const next =
+        typeof workspace === "function"
+          ? (workspace as (prev: Workspace) => Workspace)(state.workspace)
+          : workspace;
+      if (state.workspace === next) return state;
+      if (JSON.stringify(state.workspace) === JSON.stringify(next)) return state;
+      return { workspace: next };
+    }),
+  setUser: (user) => set({ user, ...sessionFromUser(user) }),
+  setSync: (sync) =>
+    set((state) => {
+      if (
+        state.sync.status === sync.status &&
+        state.sync.message === sync.message
+      ) {
+        return state;
+      }
+      return { sync };
+    }),
+  resetWorkspace: () => set({ workspace: cloneDefaultWorkspace() }),
+});
+
+export const useWorkspaceStore = create<WorkspaceStore>(creator);
+
+export const selectWorkspace = (s: WorkspaceStore) => s.workspace;
+export const selectUser = (s: WorkspaceStore) => s.user;
+export const selectOrg = (s: WorkspaceStore) => s.org;
+export const selectRole = (s: WorkspaceStore) => s.role;
+export const selectSync = (s: WorkspaceStore) => s.sync;
+
+export function selectLinksForColumn(columnId: string) {
+  return (s: WorkspaceStore): LinkItem[] =>
+    s.workspace.links.filter((l) => l.columnId === columnId);
+}
+
+export function selectFolder(id: string) {
+  return (s: WorkspaceStore): Folder | undefined =>
+    s.workspace.columns.find((c) => c.id === id);
+}
+
+export function selectTodos(s: WorkspaceStore): TodoItem[] {
+  return s.workspace.todos;
+}
+
+export function selectWorkspaceTitle(s: WorkspaceStore): string {
+  return s.workspace.settings?.title ?? "Reset Launchpad";
+}
+</file>
+
+<file path="src/types/auth.ts">
+import type { AppError } from "@/shared/api/errors";
+
+export interface AppUser {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  photoURL: string | null;
+}
+
+export type SyncStatus = "active" | "error" | "offline";
+
+export interface SyncState {
+  status: SyncStatus;
+  message: string;
+  error?: AppError;
+}
+</file>
+
+<file path="src/types/workspace.ts">
+export type FolderColor =
+  | "amber"
+  | "emerald"
+  | "violet"
+  | "rose"
+  | "cyan"
+  | "blue";
+
+export type FolderStyle = "filled" | "outline";
+
+export interface Folder {
+  id: string;
+  title: string;
+  icon: string;
+  color: FolderColor;
+  style: FolderStyle;
+}
+
+export interface LinkItem {
+  id: string;
+  columnId: string;
+  title: string;
+  url: string;
+  description?: string;
+  tags?: string[];
+  pinned?: boolean;
+}
+
+export type TaskPriority = "low" | "medium" | "high";
+
+export interface TodoItem {
+  id: string;
+  text: string;
+  done: boolean;
+  dueDate?: string;
+  dueTime?: string;
+  reminder?: boolean;
+  priority?: TaskPriority;
+  date: string;
+}
+
+export interface WorkspaceSettings {
+  title: string;
+}
+
+export interface Workspace {
+  settings: WorkspaceSettings;
+  columns: Folder[];
+  links: LinkItem[];
+  todos: TodoItem[];
+}
+
+export const DEFAULT_WORKSPACE: Workspace = {
+  settings: { title: "Reset Launchpad" },
+  columns: [
+    {
+      id: "col-1",
+      title: "Daily & Essentials",
+      icon: "fa-solid fa-star",
+      color: "amber",
+      style: "filled",
+    },
+    {
+      id: "col-2",
+      title: "Chats & Socials",
+      icon: "fa-solid fa-comments",
+      color: "emerald",
+      style: "filled",
+    },
+    {
+      id: "col-3",
+      title: "Tools & AI",
+      icon: "fa-solid fa-wand-magic-sparkles",
+      color: "violet",
+      style: "filled",
+    },
+    {
+      id: "col-4",
+      title: "Dev & Projects",
+      icon: "fa-solid fa-code",
+      color: "rose",
+      style: "filled",
+    },
+  ],
+  links: [
+    {
+      id: "link-1",
+      columnId: "col-1",
+      title: "Google Search",
+      url: "https://google.com",
+      description: "Quick web searches & tools",
+      tags: ["Search"],
+      pinned: true,
+    },
+    {
+      id: "link-3",
+      columnId: "col-2",
+      title: "WhatsApp Web",
+      url: "https://web.whatsapp.com",
+      description: "Messaging & team chats",
+      tags: ["Chat"],
+      pinned: true,
+    },
+    {
+      id: "link-5",
+      columnId: "col-3",
+      title: "ChatGPT",
+      url: "https://chatgpt.com",
+      description: "AI assistant & code helper",
+      tags: ["AI"],
+      pinned: true,
+    },
+  ],
+  todos: [],
+};
+
+export function cloneDefaultWorkspace(): Workspace {
+  return JSON.parse(JSON.stringify(DEFAULT_WORKSPACE)) as Workspace;
+}
+</file>
+
+<file path="src/App.tsx">
+import { Outlet } from "react-router-dom";
+import { AppHeader } from "@/components/layout/AppHeader";
+import { useWorkspaceSync } from "@/features/dashboard/hooks/useWorkspaceSync";
+import { AppShell } from "@/app/AppShell";
+
+export function App() {
+  useWorkspaceSync();
+  return (
+    <AppShell header={<AppHeader />}>
+      <Outlet />
+    </AppShell>
+  );
+}
+</file>
+
+<file path="src/index.css">
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 240 5% 96%;
+    --foreground: 240 10% 8%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 8%;
+    --primary: 221 83% 53%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 5% 94%;
+    --secondary-foreground: 240 6% 20%;
+    --muted: 240 5% 94%;
+    --muted-foreground: 240 4% 46%;
+    --accent: 240 5% 94%;
+    --accent-foreground: 240 6% 20%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 142 71% 36%;
+    --border: 240 6% 90%;
+    --input: 240 6% 90%;
+    --ring: 221 83% 53%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 240 6% 7%;
+    --foreground: 0 0% 96%;
+    --card: 240 5% 10%;
+    --card-foreground: 0 0% 96%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 240 6% 7%;
+    --secondary: 240 4% 14%;
+    --secondary-foreground: 0 0% 96%;
+    --muted: 240 4% 14%;
+    --muted-foreground: 240 5% 64%;
+    --accent: 240 4% 14%;
+    --accent-foreground: 0 0% 96%;
+    --destructive: 0 62% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 142 69% 45%;
+    --border: 240 4% 16%;
+    --input: 240 4% 16%;
+    --ring: 217 91% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html,
+  body,
+  #root {
+    @apply h-full;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family:
+      ui-sans-serif,
+      system-ui,
+      -apple-system,
+      BlinkMacSystemFont,
+      "Segoe UI",
+      Roboto,
+      "Helvetica Neue",
+      Arial,
+      sans-serif;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-tap-highlight-color: transparent;
+  }
+  html,
+  body,
+  #root {
+    overscroll-behavior-y: none;
+  }
+}
+
+@layer utilities {
+  .touch-active:active {
+    transform: scale(0.98);
+    transition: transform 150ms ease;
+  }
+}
+</file>
+
+<file path="src/main.tsx">
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import { RouterProvider } from "react-router-dom";
+import { ThemeProvider } from "@/features/theme/ThemeProvider";
+import { LoginOverlay } from "@/features/auth/LoginOverlay";
+import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
+import { router } from "@/router";
+import "./index.css";
+
+createRoot(document.getElementById("root")!).render(
+  <StrictMode>
+    <ErrorBoundary>
+      <ThemeProvider>
+        <LoginOverlay />
+        <RouterProvider router={router} />
+      </ThemeProvider>
+    </ErrorBoundary>
+  </StrictMode>,
+);
+</file>
+
+<file path="src/router.tsx">
+import { lazy, Suspense } from "react";
+import { createBrowserRouter, Navigate } from "react-router-dom";
+import { App } from "@/App";
+import { NotFoundPage } from "@/pages/NotFoundPage";
+import { AuthGuard } from "@/features/auth/AuthGuard";
+
+const DashboardPage = lazy(() =>
+  import("@/features/dashboard/DashboardPage").then((m) => ({
+    default: m.DashboardPage,
+  })),
+);
+
+const SettingsPage = lazy(() =>
+  import("@/pages/SettingsPage").then((m) => ({ default: m.SettingsPage })),
+);
+
+function PageFallback() {
+  return (
+    <main className="flex-1 max-w-5xl mx-auto w-full p-6 flex items-center justify-center">
+      <div className="text-sm text-muted-foreground">Loading…</div>
+    </main>
+  );
+}
+
+function ProtectedShell() {
+  return (
+    <AuthGuard>
+      <App />
+    </AuthGuard>
+  );
+}
+
+export const router = createBrowserRouter([
+  {
+    element: <ProtectedShell />,
+    children: [
+      { path: "/", element: <Navigate to="/dashboard" replace /> },
+      {
+        path: "/dashboard",
+        element: (
+          <Suspense fallback={<PageFallback />}>
+            <DashboardPage />
+          </Suspense>
+        ),
+      },
+      {
+        path: "/settings",
+        element: (
+          <Suspense fallback={<PageFallback />}>
+            <SettingsPage />
+          </Suspense>
+        ),
+      },
+      { path: "*", element: <NotFoundPage /> },
+    ],
+  },
+]);
+</file>
+
+<file path="src/vite-env.d.ts">
+/// <reference types="vite/client" />
+
+interface ImportMetaEnv {
+  readonly VITE_FIREBASE_API_KEY?: string;
+  readonly VITE_FIREBASE_AUTH_DOMAIN?: string;
+  readonly VITE_FIREBASE_PROJECT_ID?: string;
+  readonly VITE_FIREBASE_STORAGE_BUCKET?: string;
+  readonly VITE_FIREBASE_MESSAGING_SENDER_ID?: string;
+  readonly VITE_FIREBASE_APP_ID?: string;
+  readonly VITE_FIREBASE_MEASUREMENT_ID?: string;
+  readonly VITE_APP_ID?: string;
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv;
+}
+</file>
+
+<file path=".env.example">
+# Firebase
+# Copy this file to .env.local and fill in your values.
+# Defaults match the Reset Launchpad project. Override per-environment as needed.
+
+VITE_FIREBASE_API_KEY=AIzaSyBMGA15NjP9m_4LkXG8Pr9HMG0conyCfQ4
+VITE_FIREBASE_AUTH_DOMAIN=launchpad-41d1e.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=launchpad-41d1e
+VITE_FIREBASE_STORAGE_BUCKET=launchpad-41d1e.firebasestorage.app
+VITE_FIREBASE_MESSAGING_SENDER_ID=819649466375
+VITE_FIREBASE_APP_ID=1:819649466375:web:181be4f5851b6895925aa2
+VITE_FIREBASE_MEASUREMENT_ID=G-949M4L5YYS
+
+# Internal app id used for the Firestore data path (artifacts/{APP_ID}/users/...)
+VITE_APP_ID=reset-launchpad-app
+</file>
+
+<file path=".gitignore">
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+dist/
+dist-ssr/
+*.local
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Vite
+.vite/
+*.tsbuildinfo
+
+# Cloudflare
+.wrangler/
+</file>
+
+<file path="components.json">
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "new-york",
+  "rsc": false,
+  "tsx": true,
+  "tailwind": {
+    "config": "tailwind.config.cjs",
+    "css": "src/index.css",
+    "baseColor": "slate",
+    "cssVariables": true,
+    "prefix": ""
+  },
+  "aliases": {
+    "components": "@/components",
+    "utils": "@/lib/utils",
+    "ui": "@/components/ui",
+    "lib": "@/lib",
+    "hooks": "@/hooks"
+  }
+}
+</file>
+
+<file path="index.html">
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#030712" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <title>Reset Launchpad</title>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+    />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+</file>
+
+<file path="package.json">
+{
+  "name": "launchpad",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Reset Launchpad - a personal bookmark dashboard with cloud sync",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "tsc -b --noEmit"
+  },
+  "dependencies": {
+    "@radix-ui/react-checkbox": "^1.1.2",
+    "@radix-ui/react-dialog": "^1.1.2",
+    "@radix-ui/react-dropdown-menu": "^2.1.2",
+    "@radix-ui/react-label": "^2.1.0",
+    "@radix-ui/react-slot": "^1.1.0",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.1.1",
+    "firebase": "^11.6.1",
+    "lucide-react": "^0.460.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.28.0",
+    "tailwind-merge": "^2.5.4",
+    "tailwindcss-animate": "^1.0.7",
+    "zustand": "^5.0.1"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.54.2",
+    "@types/node": "^22.9.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.7.0",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.15",
+    "typescript": "^5.6.3",
+    "vite": "^6.4.3",
+    "wrangler": "^4.127.1"
+  }
+}
+</file>
+
+<file path="postcss.config.js">
+export default {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+};
+</file>
+
+<file path="README.md">
+# Reset Launchpad
+
+A modern personal bookmark dashboard with Google sign-in and cloud sync. Organize links into themed folders, manage a daily to-do list, and access your workspace from any device.
+
+## Stack
+
+- **React 18** + **TypeScript** for the UI
+- **Vite** for dev server and build
+- **Tailwind CSS** + **shadcn/ui-style** primitives (Radix UI under the hood)
+- **React Router** for routing with route-level code splitting
+- **Zustand** for workspace and UI state
+- **Firebase Auth** (Google) + **Firestore** for cloud sync
+- **lucide-react** for icons (with **Font Awesome 6** for folder icons)
+
+## Project structure
+
+```
+src/
+├── main.tsx                    # Entry: mounts router + theme + login overlay
+├── App.tsx                     # Authenticated layout (header, gradient glow, outlet)
+├── router.tsx                  # Route definitions with lazy loading
+├── index.css                   # Tailwind layers + design tokens
+├── lib/                        # Pure utilities (cn, date helpers)
+├── types/                      # Domain types (workspace, auth)
+├── services/firebase/          # Firebase config + auth + workspace persistence
+├── stores/                     # Zustand stores (workspace data, dashboard UI state)
+├── components/
+│   ├── ui/                     # shadcn-style primitives (Button, Dialog, etc.)
+│   ├── layout/                 # AppHeader, SearchBar, SyncIndicator
+│   └── shared/                 # ConfirmDialog hook
+├── features/                   # Feature modules, one folder per concern
+│   ├── auth/                   # LoginOverlay, useAuth, AuthGuard
+│   ├── theme/                  # ThemeProvider, useTheme, ThemeToggle
+│   ├── todos/                  # Daily to-do section + hook
+│   ├── dashboard/              # Folder accordion, link cards, modals, themes
+│   └── settings/               # Backup/restore
+└── pages/                      # Route-level pages (Settings, NotFound)
+```
+
+## Getting started
+
+```bash
+# 1. Install
+npm install
+
+# 2. Configure Firebase (optional - defaults match the Reset Launchpad project)
+cp .env.example .env.local
+# Edit .env.local if you want to point at a different Firebase project.
+
+# 3. Run
+npm run dev
+# Opens http://localhost:3000
+
+# 4. Build
+npm run build
+npm run preview
+```
+
+## Local Google sign-in
+
+Firebase blocks sign-in from unauthorized domains. For local dev:
+
+1. **Firebase Console → Authentication → Settings → Authorized domains:** add `localhost` (and `127.0.0.1` if you use that).
+2. **Google Cloud → Credentials → your Web OAuth client → Authorized JavaScript origins:** add `http://localhost:3000` (and `http://127.0.0.1:3000` if used).
+3. Open `http://localhost:3000` in Chrome/Edge — not VS Code's Simple Browser (it blocks popups).
+
+## Firestore data path
+
+Workspace state is stored at:
+
+```
+artifacts/{VITE_APP_ID}/users/{uid}/data/state
+```
+
+The full document is overwritten on each save (small payloads, single device, single user).
+
+## What's coming next
+
+- AI integrations (smart folder suggestions, link summaries, daily planner)
+- Additional service integrations (Pocket import, Notion sync, browser extension)
+- Shared workspaces and real-time collaboration
+</file>
+
+<file path="tailwind.config.cjs">
+/** @type {import('tailwindcss').Config} */
+module.exports = {
+  darkMode: ["class"],
+  content: ["./index.html", "./src/**/*.{ts,tsx}"],
+  theme: {
+    container: {
+      center: true,
+      padding: "2rem",
+      screens: { "2xl": "1400px" },
+    },
+    extend: {
+      colors: {
+        border: "hsl(var(--border))",
+        input: "hsl(var(--input))",
+        ring: "hsl(var(--ring))",
+        background: "hsl(var(--background))",
+        foreground: "hsl(var(--foreground))",
+        primary: {
+          DEFAULT: "hsl(var(--primary))",
+          foreground: "hsl(var(--primary-foreground))",
+        },
+        secondary: {
+          DEFAULT: "hsl(var(--secondary))",
+          foreground: "hsl(var(--secondary-foreground))",
+        },
+        destructive: {
+          DEFAULT: "hsl(var(--destructive))",
+          foreground: "hsl(var(--destructive-foreground))",
+        },
+        muted: {
+          DEFAULT: "hsl(var(--muted))",
+          foreground: "hsl(var(--muted-foreground))",
+        },
+        accent: {
+          DEFAULT: "hsl(var(--accent))",
+          foreground: "hsl(var(--accent-foreground))",
+        },
+        card: {
+          DEFAULT: "hsl(var(--card))",
+          foreground: "hsl(var(--card-foreground))",
+        },
+        success: "hsl(var(--success))",
+      },
+      borderRadius: {
+        lg: "var(--radius)",
+        md: "calc(var(--radius) - 2px)",
+        sm: "calc(var(--radius) - 4px)",
+      },
+      keyframes: {
+        "accordion-down": {
+          from: { height: "0" },
+          to: { height: "var(--radix-accordion-content-height)" },
+        },
+        "accordion-up": {
+          from: { height: "var(--radix-accordion-content-height)" },
+          to: { height: "0" },
+        },
+        "pulse-soft": {
+          "0%, 100%": { opacity: "1" },
+          "50%": { opacity: "0.6" },
+        },
+      },
+      animation: {
+        "accordion-down": "accordion-down 0.2s ease-out",
+        "accordion-up": "accordion-up 0.2s ease-out",
+        "pulse-soft": "pulse-soft 2s ease-in-out infinite",
+      },
+    },
+  },
+  plugins: [require("tailwindcss-animate")],
+};
+</file>
+
+<file path="tsconfig.app.json">
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "jsx": "react-jsx",
+
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["src"]
+}
+</file>
+
+<file path="tsconfig.json">
+{
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.node.json" }
+  ]
+}
+</file>
+
+<file path="tsconfig.node.json">
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["vite.config.ts"]
+}
+</file>
+
+<file path="vite.config.ts">
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import { cloudflare } from "@cloudflare/vite-plugin";
+import path from "node:path";
+
+export default defineConfig({
+  plugins: [react(), cloudflare()],
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
+    },
+  },
+  server: {
+    port: 3000,
+    host: true,
+  },
+});
+</file>
+
+<file path="wrangler.toml">
+name = "launchpad"
+compatibility_date = "2025-04-01"
+
+[assets]
+directory = "./dist"
+not_found_handling = "single-page-application"
+</file>
+
+</files>
