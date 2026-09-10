@@ -19,13 +19,11 @@ export function SecurityLockOverlay() {
   useEffect(() => {
     const handleActivity = () => recordActivity();
 
-    // Track user interaction to keep session alive
     window.addEventListener("mousemove", handleActivity);
     window.addEventListener("keydown", handleActivity);
     window.addEventListener("touchstart", handleActivity);
     window.addEventListener("click", handleActivity);
 
-    // Check every 5 seconds if the session has expired
     const interval = setInterval(() => {
       const state = useSecurityStore.getState();
       if (!state.isLocked && state.timeoutMinutes > 0 && state.authMethod === "pin" && state.pinCode) {
@@ -56,7 +54,7 @@ export function SecurityLockOverlay() {
     if (correctPin && next === correctPin) {
       setIsLocked(false);
       setInputPin("");
-      recordActivity(); // Reset timer on successful unlock
+      recordActivity();
     } else if (correctPin && next.length >= correctPin.length) {
       setErrorMsg("Incorrect PIN");
     }
@@ -83,7 +81,6 @@ export function SecurityLockOverlay() {
 
         {authMethod === "pin" && correctPin ? (
           <div className="w-full space-y-4">
-            {/* PIN Dots Indicator */}
             <div className="flex justify-center gap-3 py-2">
               {Array.from({ length: correctPin.length }).map((_, idx) => (
                 <div
@@ -97,7 +94,6 @@ export function SecurityLockOverlay() {
 
             {errorMsg && <p className="text-xs font-bold text-destructive">{errorMsg}</p>}
 
-            {/* Keypad */}
             <div className="grid grid-cols-3 gap-2 pt-2">
               {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((num) => (
                 <button
