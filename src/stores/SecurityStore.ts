@@ -39,12 +39,15 @@ function getInitialConfig() {
 
 export const useSecurityStore = create<SecurityState>((set, get) => {
   const initial = getInitialConfig();
+  
+  // If PIN is enabled and a PIN exists, the app MUST start locked
+  const shouldLockInitially = initial.authMethod === "pin" && !!initial.pinCode;
 
   return {
     authMethod: initial.authMethod,
     pinCode: initial.pinCode,
     timeoutMinutes: initial.timeoutMinutes,
-    isLocked: false,
+    isLocked: shouldLockInitially,
     lastActiveTimestamp: Date.now(),
     settingsModalOpen: false,
 

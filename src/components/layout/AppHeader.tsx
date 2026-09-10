@@ -11,12 +11,13 @@ import {
   FileText, 
   BarChart3
 } from "lucide-react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/auth/ThemeToggle";
 import { useAuth } from "@/components/auth/useAuth";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 import { useUIStore, type ActiveTab } from "@/stores/uiStore";
+import { useSecurityStore } from "@/stores/SecurityStore";
 import { useBackup } from "@/pages/Settings/useBackup";
 import { SyncIndicator } from "./SyncIndicator";
 import {
@@ -40,6 +41,7 @@ export function AppHeader() {
   const openAddLink = useUIStore((s) => s.openAddLink);
   const openAddFolder = useUIStore((s) => s.openAddFolder);
   const openReportPasteModal = useUIStore((s) => s.openReportPasteModal);
+  const openSettingsModal = useSecurityStore((s) => s.openSettingsModal);
 
   const avatarUrl =
     user?.photoURL ??
@@ -75,9 +77,8 @@ export function AppHeader() {
           </div>
         </div>
 
-        {/* Right Action Tools: + Quick Action Dropdown, Theme, Settings Menu */}
+        {/* Right Action Tools */}
         <div className="flex items-center gap-1.5 sm:gap-2">
-          {/* Universal Create Dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -154,11 +155,9 @@ export function AppHeader() {
                   </div>
                 </DropdownMenuLabel>
               )}
-              <DropdownMenuItem asChild>
-                <Link to="/settings" className="cursor-pointer">
-                  <Settings className="h-3.5 w-3.5 text-muted-foreground" />
-                  Settings & Data
-                </Link>
+              <DropdownMenuItem onSelect={openSettingsModal} className="cursor-pointer">
+                <Settings className="h-3.5 w-3.5 text-muted-foreground" />
+                Settings, PIN & Security
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={exportBackup} className="cursor-pointer">
                 <Download className="h-3.5 w-3.5 text-muted-foreground" />

@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Lock, Delete, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useSecurityStore } from "@/stores/securityStore";
+import { useSecurityStore } from "@/stores/SecurityStore";
 import { useAuth } from "./useAuth";
 
 export function SecurityLockOverlay() {
@@ -9,10 +9,41 @@ export function SecurityLockOverlay() {
   const setIsLocked = useSecurityStore((s) => s.setIsLocked);
   const authMethod = useSecurityStore((s) => s.authMethod);
   const correctPin = useSecurityStore((s) => s.pinCode);
+  const recordActivity = useSecurityStore((s) => s.recordActivity);
   const { logout } = useAuth();
 
   const [inputPin, setInputPin] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
+
+  // Global Inactivity Tracker
+  useEffect(() => {
+    const handleActivity = () => recordActivity();
+
+    // Track user interaction to keep session alive
+    window.addEventListener("mousemove", handleActivity);
+    window.addEventListener("keydown", handleActivity);
+    window.addEventListener("touchstart", handleActivity);
+    window.addEventListener("click", handleActivity);
+
+    // Check every 5 seconds if the session has expired
+    const interval = setInterval(() => {
+      const state = useSecurityStore.getState();
+      if (!state.isLocked && state.timeoutMinutes > 0 && state.authMethod === "pin" && state.pinCode) {
+        const elapsed = Date.now() - state.lastActiveTimestamp;
+        if (elapsed >= state.timeoutMinutes * 60 * 1000) {
+          state.setIsLocked(true);
+        }
+      }
+    }, 5000);
+
+    return () => {
+      window.removeEventListener("mousemove", handleActivity);
+      window.removeEventListener("keydown", handleActivity);
+      window.removeEventListener("touchstart", handleActivity);
+      window.removeEventListener("click", handleActivity);
+      clearInterval(interval);
+    };
+  }, [recordActivity]);
 
   if (!isLocked) return null;
 
@@ -25,6 +56,7 @@ export function SecurityLockOverlay() {
     if (correctPin && next === correctPin) {
       setIsLocked(false);
       setInputPin("");
+      recordActivity(); // Reset timer on successful unlock
     } else if (correctPin && next.length >= correctPin.length) {
       setErrorMsg("Incorrect PIN");
     }
