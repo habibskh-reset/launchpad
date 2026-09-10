@@ -42,7 +42,7 @@ export function ReportSummaryCards({ reports }: Props) {
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-      {/* 1. Assessments (1st) */}
+      {/* 1. Assessments */}
       <Card className="p-3.5 space-y-2 bg-card border-border shadow-sm">
         <div className="flex items-center justify-between border-b border-border pb-1.5">
           <span className="text-[11px] font-black uppercase text-muted-foreground flex items-center gap-1">
@@ -68,7 +68,7 @@ export function ReportSummaryCards({ reports }: Props) {
         </div>
       </Card>
 
-      {/* 2. Follow-Ups (Done) (2nd) */}
+      {/* 2. Follow-Ups (Done) */}
       <Card className="p-3.5 space-y-2 bg-card border-border shadow-sm">
         <div className="flex items-center justify-between border-b border-border pb-1.5">
           <span className="text-[11px] font-black uppercase text-muted-foreground flex items-center gap-1">
@@ -100,7 +100,7 @@ export function ReportSummaryCards({ reports }: Props) {
         </div>
       </Card>
 
-      {/* 3. Collection From (3rd) */}
+      {/* 3. Collection From */}
       <Card className="p-3.5 space-y-2 bg-card border-border shadow-sm">
         <div className="flex items-center justify-between border-b border-border pb-1.5">
           <span className="text-[11px] font-black uppercase text-muted-foreground flex items-center gap-1">
@@ -125,7 +125,7 @@ export function ReportSummaryCards({ reports }: Props) {
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">PT:</span>
-            <span className="font-bold text-violet-500">{totals.ptCount} <span className="text-muted-foreground font-normal">(₹{totals.ptAmount.toLocaleString("en-IN")})</span></span>
+            <span className="font-bold">{totals.ptCount} <span className="text-muted-foreground font-normal">(₹{totals.ptAmount.toLocaleString("en-IN")})</span></span>
           </div>
           {totals.otherCount > 0 && (
             <div className="flex justify-between">
@@ -136,7 +136,7 @@ export function ReportSummaryCards({ reports }: Props) {
         </div>
       </Card>
 
-      {/* 4. Total Collection & Cash Flow (4th) */}
+      {/* 4. Total Collection & Cash Flow */}
       <Card className="p-3.5 space-y-2 bg-card border-border shadow-sm">
         <div className="flex items-center justify-between border-b border-border pb-1.5">
           <span className="text-[11px] font-black uppercase text-muted-foreground flex items-center gap-1">
