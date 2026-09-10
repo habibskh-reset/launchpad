@@ -17,7 +17,7 @@ import { ThemeToggle } from "@/components/auth/ThemeToggle";
 import { useAuth } from "@/components/auth/useAuth";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 import { useUIStore, type ActiveTab } from "@/stores/uiStore";
-import { useSecurityStore } from "@/stores/securityStore";
+import { useSecurityStore } from "@/stores/SecurityStore";
 import { useBackup } from "@/pages/Settings/useBackup";
 import { SyncIndicator } from "./SyncIndicator";
 import {

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Lock, Delete, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useSecurityStore } from "@/stores/securityStore";
+import { useSecurityStore } from "@/stores/SecurityStore";
 import { useAuth } from "./useAuth";
 
 export function SecurityLockOverlay() {
