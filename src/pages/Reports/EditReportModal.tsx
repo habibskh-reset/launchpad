@@ -27,7 +27,10 @@ export function EditReportModal({ open, onOpenChange, report, onSave }: Props) {
   };
 
   const update = (field: keyof StoredReport, val: any) => {
-    setForm((prev) => prev ? { ...prev, [field]: Number(val) || 0 } : null);
+    setForm((prev) => {
+      if (!prev) return null;
+      return { ...prev, [field]: Number(val) || 0 } as unknown as StoredReport;
+    });
   };
 
   return (

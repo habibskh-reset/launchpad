@@ -15,7 +15,7 @@ export interface SyncState {
   error?: AppError;
 }
 
-interface WorkspaceStoreState {
+export interface WorkspaceStoreState {
   user: User | null;
   workspace: Workspace;
   sync: SyncState;
@@ -61,3 +61,4 @@ export const useWorkspaceStore = create<WorkspaceStoreState>((set) => ({
 }));
 
 export const selectWorkspace = (state: WorkspaceStoreState) => state.workspace;
+export const selectTodos = (state: WorkspaceStoreState) => state.workspace.todos;
