@@ -48,7 +48,7 @@ function sanitizeForFirestore(value: unknown): unknown {
   return undefined;
 }
 
-function normalizeWorkspace(data: Partial<Workspace>): Workspace {
+export function normalizeWorkspace(data: Partial<Workspace>): Workspace {
   return {
     settings: data.settings ?? {
       title: "Reset Launchpad",
@@ -57,6 +57,7 @@ function normalizeWorkspace(data: Partial<Workspace>): Workspace {
     links: Array.isArray(data.links) ? data.links : [],
     todos: Array.isArray(data.todos) ? data.todos : [],
     notes: Array.isArray(data.notes) ? data.notes : [],
+    reports: Array.isArray(data.reports) ? data.reports : [],
   };
 }
 

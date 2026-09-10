@@ -1,162 +1,63 @@
-import { create, type StateCreator } from "zustand";
+import { create } from "zustand";
+import type { User } from "firebase/auth";
+import type { AppError } from "@/shared/api/errors";
 import {
-  type Workspace,
-  type LinkItem,
-  type Folder,
-  type TodoItem,
   cloneDefaultWorkspace,
+  type Workspace,
+  type TodoItem,
 } from "@/types/workspace";
-import type { AppUser, SyncState } from "@/types/auth";
+import type { NoteItem } from "@/pages/Notes/notes.types";
+import type { StoredReport } from "@/pages/Reports/types";
 
-export type OrgRole = "owner" | "admin" | "member" | "viewer";
-export type PlanId = "free" | "pro";
-
-export interface Organization {
-  id: string;
-  name: string;
-  plan: PlanId;
+export interface SyncState {
+  status: "idle" | "active" | "offline" | "error";
+  message: string;
+  error?: AppError;
 }
 
-const DEFAULT_ORG: Organization = {
-  id: "org_personal",
-  name: "Personal",
-  plan: "pro",
-};
-
-function sessionFromUser(user: AppUser | null): {
-  org: Organization;
-  role: OrgRole;
-} {
-  if (!user) {
-    return { org: DEFAULT_ORG, role: "viewer" };
-  }
-  const name = user.displayName?.trim();
-  return {
-    org: {
-      id: `org_${user.uid}`,
-      name: name ? `${name}'s workspace` : "Personal",
-      plan: "pro",
-    },
-    role: "owner",
-  };
-}
-
-interface WorkspaceStore {
+interface WorkspaceStoreState {
+  user: User | null;
   workspace: Workspace;
-  user: AppUser | null;
-  org: Organization;
-  role: OrgRole;
   sync: SyncState;
-  setWorkspace: (
-    workspace: Workspace | ((prev: Workspace) => Workspace),
-  ) => void;
-  setUser: (user: AppUser | null) => void;
+  setUser: (user: User | null) => void;
+  setWorkspace: (workspace: Workspace) => void;
   setSync: (sync: SyncState) => void;
-  resetWorkspace: () => void;
+  setTodos: (updater: (todos: TodoItem[]) => TodoItem[]) => void;
+  setNotes: (updater: (notes: NoteItem[]) => NoteItem[]) => void;
+  setReports: (updater: (reports: StoredReport[]) => StoredReport[]) => void;
 }
 
-const creator: StateCreator<WorkspaceStore> = (set) => ({
-  workspace: cloneDefaultWorkspace(),
+export const useWorkspaceStore = create<WorkspaceStoreState>((set) => ({
   user: null,
-  org: DEFAULT_ORG,
-  role: "viewer",
-  sync: { status: "offline", message: "Connecting..." },
+  workspace: cloneDefaultWorkspace(),
+  sync: {
+    status: "idle",
+    message: "Initializing...",
+  },
+  setUser: (user) => set({ user }),
+  setWorkspace: (workspace) => set({ workspace }),
+  setSync: (sync) => set({ sync }),
+  setTodos: (updater) =>
+    set((state) => ({
+      workspace: {
+        ...state.workspace,
+        todos: updater(state.workspace.todos || []),
+      },
+    })),
+  setNotes: (updater) =>
+    set((state) => ({
+      workspace: {
+        ...state.workspace,
+        notes: updater(state.workspace.notes || []),
+      },
+    })),
+  setReports: (updater) =>
+    set((state) => ({
+      workspace: {
+        ...state.workspace,
+        reports: updater(state.workspace.reports || []),
+      },
+    })),
+}));
 
-  setWorkspace: (workspace) =>
-    set((state) => {
-      const next =
-        typeof workspace === "function"
-          ? (workspace as (prev: Workspace) => Workspace)(state.workspace)
-          : workspace;
-
-      if (state.workspace === next) {
-        return state;
-      }
-
-      if (
-        JSON.stringify(state.workspace) ===
-        JSON.stringify(next)
-      ) {
-        return state;
-      }
-
-      return { workspace: next };
-    }),
-
-  setUser: (user) =>
-    set({
-      user,
-      ...sessionFromUser(user),
-    }),
-
-  setSync: (sync) =>
-    set((state) => {
-      if (
-        state.sync.status === sync.status &&
-        state.sync.message === sync.message &&
-        state.sync.error === sync.error
-      ) {
-        return state;
-      }
-
-      return { sync };
-    }),
-
-  resetWorkspace: () =>
-    set({
-      workspace: cloneDefaultWorkspace(),
-    }),
-});
-
-export const useWorkspaceStore =
-  create<WorkspaceStore>(creator);
-
-export const selectWorkspace =
-  (s: WorkspaceStore) => s.workspace;
-
-export const selectUser =
-  (s: WorkspaceStore) => s.user;
-
-export const selectOrg =
-  (s: WorkspaceStore) => s.org;
-
-export const selectRole =
-  (s: WorkspaceStore) => s.role;
-
-export const selectSync =
-  (s: WorkspaceStore) => s.sync;
-
-export function selectLinksForColumn(
-  columnId: string,
-) {
-  return (s: WorkspaceStore): LinkItem[] =>
-    s.workspace.links.filter(
-      (link) => link.columnId === columnId,
-    );
-}
-
-export function selectFolder(
-  id: string,
-) {
-  return (
-    s: WorkspaceStore,
-  ): Folder | undefined =>
-    s.workspace.columns.find(
-      (column) => column.id === id,
-    );
-}
-
-export function selectTodos(
-  s: WorkspaceStore,
-): TodoItem[] {
-  return s.workspace.todos;
-}
-
-export function selectWorkspaceTitle(
-  s: WorkspaceStore,
-): string {
-  return (
-    s.workspace.settings?.title ??
-    "Reset Launchpad"
-  );
-}
+export const selectWorkspace = (state: WorkspaceStoreState) => state.workspace;

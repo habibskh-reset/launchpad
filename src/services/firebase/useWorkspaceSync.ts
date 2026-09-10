@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import {
   persistWorkspace,
   subscribeWorkspace,
+  normalizeWorkspace,
 } from "@/services/firebase/workspace";
 import {
   formatAppError,
@@ -28,18 +29,6 @@ function isWorkspace(value: unknown): value is Workspace {
   }
   const workspace = value as Partial<Workspace>;
   return Array.isArray(workspace.columns) && Array.isArray(workspace.links);
-}
-
-function normalizeWorkspace(value: Workspace): Workspace {
-  return {
-    settings: value.settings ?? {
-      title: "Reset Launchpad",
-    },
-    columns: value.columns,
-    links: value.links,
-    todos: Array.isArray(value.todos) ? value.todos : [],
-    notes: Array.isArray(value.notes) ? value.notes : [],
-  };
 }
 
 function fingerprint(workspace: Workspace): string {
@@ -212,7 +201,7 @@ export function useWorkspaceSync() {
             error: appError,
           });
         });
-    }, 300);
+    }, 350);
 
     return () => {
       window.clearTimeout(timeoutId);

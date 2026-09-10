@@ -1,4 +1,5 @@
 import type { NoteItem } from "@/pages/Notes/notes.types";
+import type { StoredReport } from "@/pages/Reports/types";
 
 export type FolderColor =
   | "amber"
@@ -51,6 +52,7 @@ export interface Workspace {
   links: LinkItem[];
   todos: TodoItem[];
   notes?: NoteItem[];
+  reports?: StoredReport[];
 }
 
 export const DEFAULT_WORKSPACE: Workspace = {
@@ -116,6 +118,7 @@ export const DEFAULT_WORKSPACE: Workspace = {
   ],
   todos: [],
   notes: [],
+  reports: [],
 };
 
 export function cloneDefaultWorkspace(): Workspace {

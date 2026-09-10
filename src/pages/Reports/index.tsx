@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { 
   Trash2, 
   Plus, 
@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useUIStore } from "@/stores/uiStore";
+import { useWorkspaceStore } from "@/stores/workspaceStore";
 import { createId } from "@/lib/id";
 import { cn } from "@/lib/utils";
 import { 
@@ -19,8 +20,6 @@ import {
 } from "./types";
 import { ReportSummaryCards } from "./ReportSummaryCards";
 
-const STORAGE_KEY = "launchpad_gn_reports";
-
 export function ReportsPage() {
   const [rawText, setRawText] = useState("");
   const [period, setPeriod] = useState<"month" | "week" | "year">("month");
@@ -31,59 +30,9 @@ export function ReportsPage() {
 
   const [ledgerOpen, setLedgerOpen] = useState(false);
 
-  const [reports, setReports] = useState<StoredReport[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (!saved) return [];
-      const parsed: any[] = JSON.parse(saved);
-      return parsed.map((item) => {
-        let d = item.date || "";
-        if (d.includes("-") && d.split("-")[0].length === 4) {
-          const [y, m, day] = d.split("-");
-          d = `${day}-${m}-${y}`;
-        }
-        const [dayStr, mStr, yStr] = d.split("-");
-        const jsDate = new Date(safeInt(yStr), safeInt(mStr) - 1, safeInt(dayStr));
-        const ts = jsDate.getTime();
-
-        let newAmount = safeInt(item.newAmount);
-        let renewAmount = safeInt(item.renewAmount);
-        let balanceAmount = safeInt(item.balanceAmount);
-        let ptCount = safeInt(item.ptCount);
-        let ptAmount = safeInt(item.ptAmount);
-        let todayCollection = safeInt(item.todayCollection);
-
-        const knownSum = newAmount + renewAmount + balanceAmount;
-        if (ptAmount === 0 && todayCollection > knownSum) {
-          ptAmount = todayCollection - knownSum;
-          ptCount = ptCount || (ptAmount >= 5000 ? Math.round(ptAmount / 5000) : 1);
-        }
-
-        return {
-          ...item,
-          date: d,
-          dayName: item.dayName || DAY_NAMES[jsDate.getDay()] || "",
-          sortTimestamp: isNaN(ts) ? Date.now() : ts,
-          newAmount,
-          renewAmount,
-          balanceAmount,
-          ptCount,
-          ptAmount,
-          todayCollection,
-          otherCount: safeInt(item.otherCount),
-          otherAmount: safeInt(item.otherAmount),
-        };
-      }).sort((a, b) => b.sortTimestamp - a.sortTimestamp);
-    } catch {
-      return [];
-    }
-  });
-
-  useEffect(() => {
-    if (reports.length > 0) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(reports));
-    }
-  }, [reports]);
+  // Cloud-synchronized reports directly from WorkspaceStore
+  const reports = useWorkspaceStore((s) => s.workspace.reports || []);
+  const setReports = useWorkspaceStore((s) => s.setReports);
 
   const handleProcess = () => {
     if (!rawText.trim()) return;
@@ -102,20 +51,18 @@ export function ReportsPage() {
       sortTimestamp: isNaN(ts) ? Date.now() : ts,
     };
 
-    const updated = [newReport, ...reports.filter((r) => r.date !== newReport.date)].sort(
-      (a, b) => b.sortTimestamp - a.sortTimestamp
+    setReports((prev) =>
+      [newReport, ...prev.filter((r) => r.date !== newReport.date)].sort(
+        (a, b) => b.sortTimestamp - a.sortTimestamp
+      )
     );
 
-    setReports(updated);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
     setRawText("");
     closeReportPasteModal();
   };
 
   const handleDelete = (id: string) => {
-    const updated = reports.filter((r) => r.id !== id);
-    setReports(updated);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    setReports((prev) => prev.filter((r) => r.id !== id));
   };
 
   const activeReports = useMemo(() => {
@@ -278,9 +225,11 @@ export function ReportsPage() {
         </div>
       </div>
 
-      {/* Direct Ingest Modal / Box positioned strictly ABOVE the summary cards */}
+      <ReportSummaryCards reports={activeReports} />
+
+      {/* Direct Ingest Modal */}
       {reportPasteModalOpen && (
-        <div className="p-4 bg-card border-2 border-primary/60 rounded-2xl space-y-3 shadow-xl animate-in fade-in-50">
+        <div className="p-4 bg-card border border-primary/50 rounded-2xl space-y-3 shadow-xl animate-in fade-in-50">
           <div className="flex justify-between items-center text-xs font-bold text-muted-foreground">
             <span>PASTE DAILY GYM NATION WHATSAPP REPORT</span>
             <button onClick={closeReportPasteModal} className="text-xs hover:text-foreground">✕</button>
@@ -304,10 +253,7 @@ export function ReportsPage() {
         </div>
       )}
 
-      {/* Summary Cards */}
-      <ReportSummaryCards reports={activeReports} />
-
-      {/* 1. Performance Summary Table */}
+      {/* 1. Performance Summary Table (Sticky Frozen Period Column) */}
       <div className="border border-border rounded-xl bg-card overflow-hidden shadow-sm">
         <div className="px-3 py-2 bg-muted/40 border-b border-border flex justify-between items-center text-xs font-bold uppercase text-muted-foreground">
           <span>{period === "month" ? "Monthly" : period === "week" ? "Weekly" : "Yearly"} Performance Summary</span>
@@ -350,7 +296,7 @@ export function ReportsPage() {
         </div>
       </div>
 
-      {/* 2. Daily Detail Ledger */}
+      {/* 2. Daily Detail Ledger (Sticky Frozen Date Column) */}
       <div className="border border-border rounded-xl bg-card overflow-hidden shadow-sm">
         <div 
           onClick={() => setLedgerOpen((prev) => !prev)}
