@@ -4,7 +4,6 @@ import { AppHeader } from "@/components/layout/AppHeader";
 import { useWorkspaceSync } from "@/services/firebase/useWorkspaceSync";
 import { AppShell } from "@/app/AppShell";
 import { QuickCaptureModal } from "@/components/layout/QuickCaptureModal";
-import { SecuritySettingsModal } from "@/components/auth/SecuritySettingsModal";
 import { useUIStore } from "@/stores/uiStore";
 
 export function App() {
@@ -37,7 +36,6 @@ export function App() {
         open={captureOpen}
         onOpenChange={handleOpenChange}
       />
-      <SecuritySettingsModal />
     </AppShell>
   );
 }
