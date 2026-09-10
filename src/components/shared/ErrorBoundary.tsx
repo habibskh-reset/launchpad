@@ -1,4 +1,8 @@
-import { Component, type ErrorInfo, type ReactNode } from "react";
+import {
+  Component,
+  type ErrorInfo,
+  type ReactNode,
+} from "react";
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -12,32 +16,87 @@ export class ErrorBoundary extends Component<
   ErrorBoundaryProps,
   ErrorBoundaryState
 > {
-  state: ErrorBoundaryState = { error: null };
+  state: ErrorBoundaryState = {
+    error: null,
+  };
 
-  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+  static getDerivedStateFromError(
+    error: Error,
+  ): ErrorBoundaryState {
     return { error };
   }
 
-  componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error("ErrorBoundary", error, info.componentStack);
+  componentDidCatch(
+    error: Error,
+    info: ErrorInfo,
+  ) {
+    console.error(
+      "Application error:",
+      error,
+      info.componentStack,
+    );
   }
 
+  private handleReload = () => {
+    window.location.reload();
+  };
+
+  private handleReset = () => {
+    this.setState({
+      error: null,
+    });
+  };
+
   render() {
-    if (!this.state.error) return this.props.children;
-    return (
-      <div className="min-h-[100dvh] flex flex-col items-center justify-center gap-3 p-6 text-center bg-background text-foreground">
-        <p className="font-medium">Something went wrong</p>
-        <p className="text-sm text-muted-foreground max-w-sm">
-          {this.state.error.message}
-        </p>
-        <button
-          type="button"
-          className="h-9 px-3.5 rounded-md bg-primary text-primary-foreground text-sm"
-          onClick={() => this.setState({ error: null })}
-        >
-          Try again
-        </button>
-      </div>
-    );
+    const { error } = this.state;
+
+    if (error) {
+      return (
+        <main className="min-h-screen flex items-center justify-center bg-background text-foreground p-6">
+          <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-sm">
+            <h1 className="text-lg font-semibold">
+              Something went wrong
+            </h1>
+
+            <p className="mt-2 text-sm text-muted-foreground">
+              The application encountered an
+              unexpected error.
+            </p>
+
+            <div className="mt-5 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={this.handleReload}
+                className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+              >
+                Reload Application
+              </button>
+
+              <button
+                type="button"
+                onClick={this.handleReset}
+                className="rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-muted"
+              >
+                Try Again
+              </button>
+            </div>
+
+            {import.meta.env.DEV && (
+              <details className="mt-5">
+                <summary className="cursor-pointer text-xs text-muted-foreground">
+                  Error details
+                </summary>
+
+                <pre className="mt-3 max-h-48 overflow-auto rounded-md bg-muted p-3 text-xs whitespace-pre-wrap">
+                  {error.message}
+                </pre>
+              </details>
+            )}
+          </div>
+        </main>
+      );
+    }
+
+    return this.props.children;
   }
 }

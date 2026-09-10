@@ -1,23 +1,31 @@
 import { lazy, Suspense } from "react";
-import { createBrowserRouter, Navigate } from "react-router-dom";
+import {
+  createBrowserRouter,
+  Navigate,
+} from "react-router-dom";
 import { App } from "@/App";
 import { NotFoundPage } from "@/pages/NotFoundPage";
-import { AuthGuard } from "@/features/auth/AuthGuard";
+import { RouteErrorPage } from "@/pages/RouteErrorPage";
+import { AuthGuard } from "@/components/auth/AuthGuard";
 
 const DashboardPage = lazy(() =>
-  import("@/features/dashboard/DashboardPage").then((m) => ({
-    default: m.DashboardPage,
+  import("@/pages/Dashboard").then((module) => ({
+    default: module.DashboardPage,
   })),
 );
 
 const SettingsPage = lazy(() =>
-  import("@/pages/SettingsPage").then((m) => ({ default: m.SettingsPage })),
+  import("@/pages/Settings").then((module) => ({
+    default: module.SettingsPage,
+  })),
 );
 
 function PageFallback() {
   return (
     <main className="flex-1 max-w-5xl mx-auto w-full p-6 flex items-center justify-center">
-      <div className="text-sm text-muted-foreground">Loading…</div>
+      <div className="text-sm text-muted-foreground">
+        Loading…
+      </div>
     </main>
   );
 }
@@ -33,8 +41,12 @@ function ProtectedShell() {
 export const router = createBrowserRouter([
   {
     element: <ProtectedShell />,
+    errorElement: <RouteErrorPage />,
     children: [
-      { path: "/", element: <Navigate to="/dashboard" replace /> },
+      {
+        path: "/",
+        element: <Navigate to="/dashboard" replace />,
+      },
       {
         path: "/dashboard",
         element: (
@@ -51,7 +63,10 @@ export const router = createBrowserRouter([
           </Suspense>
         ),
       },
-      { path: "*", element: <NotFoundPage /> },
+      {
+        path: "*",
+        element: <NotFoundPage />,
+      },
     ],
   },
 ]);

@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Home, ListChecks, Settings } from "lucide-react";
-import { useDashboardUI } from "@/stores/dashboardUIStore";
+import { BarChart3, Compass, ListChecks, Settings } from "lucide-react";
+import { useUIStore } from "@/stores/uiStore";
 import { cn } from "@/lib/utils";
 
 interface AppShellProps {
@@ -13,8 +13,8 @@ export function AppShell({ header, children }: AppShellProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const [isMobile, setIsMobile] = useState(false);
-  const activeTab = useDashboardUI((s) => s.activeTab);
-  const setActiveTab = useDashboardUI((s) => s.setActiveTab);
+  const activeTab = useUIStore((s) => s.activeTab);
+  const setActiveTab = useUIStore((s) => s.setActiveTab);
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 1024);
@@ -31,9 +31,9 @@ export function AppShell({ header, children }: AppShellProps) {
       <div className="flex-1">{children}</div>
 
       {isMobile && (
-        <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card/90 backdrop-blur-xl pb-[env(safe-area-inset-bottom)]">
-          <div className="max-w-6xl mx-auto grid grid-cols-3 text-xs font-semibold text-muted-foreground">
-            {/* Tasks Tab */}
+        <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card/95 backdrop-blur-xl pb-[env(safe-area-inset-bottom)]">
+          <div className="max-w-6xl mx-auto grid grid-cols-4 text-xs font-semibold text-muted-foreground">
+            {/* 1. Tasks & Scratchpad */}
             <button
               type="button"
               onClick={() => {
@@ -41,7 +41,7 @@ export function AppShell({ header, children }: AppShellProps) {
                 if (location.pathname !== "/dashboard") navigate("/dashboard");
               }}
               className={cn(
-                "flex flex-col items-center py-2.5 transition-colors",
+                "flex flex-col items-center py-2 transition-colors cursor-pointer",
                 !isSettings && activeTab === "tasks" ? "text-primary font-bold" : "hover:text-foreground",
               )}
             >
@@ -49,7 +49,23 @@ export function AppShell({ header, children }: AppShellProps) {
               <span>Tasks</span>
             </button>
 
-            {/* Launchpad Tab */}
+            {/* 2. Gym Nation */}
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("reports");
+                if (location.pathname !== "/dashboard") navigate("/dashboard");
+              }}
+              className={cn(
+                "flex flex-col items-center py-2 transition-colors cursor-pointer",
+                !isSettings && activeTab === "reports" ? "text-primary font-bold" : "hover:text-foreground",
+              )}
+            >
+              <BarChart3 className="h-4 w-4 mb-0.5" />
+              <span>Gym Report</span>
+            </button>
+
+            {/* 3. Resources (Launchpad) */}
             <button
               type="button"
               onClick={() => {
@@ -57,20 +73,20 @@ export function AppShell({ header, children }: AppShellProps) {
                 if (location.pathname !== "/dashboard") navigate("/dashboard");
               }}
               className={cn(
-                "flex flex-col items-center py-2.5 transition-colors",
+                "flex flex-col items-center py-2 transition-colors cursor-pointer",
                 !isSettings && activeTab === "launchpad" ? "text-primary font-bold" : "hover:text-foreground",
               )}
             >
-              <Home className="h-4 w-4 mb-0.5" />
-              <span>Launchpad</span>
+              <Compass className="h-4 w-4 mb-0.5" />
+              <span>Resources</span>
             </button>
 
-            {/* Settings Tab */}
+            {/* 4. Settings */}
             <button
               type="button"
               onClick={() => navigate("/settings")}
               className={cn(
-                "flex flex-col items-center py-2.5 transition-colors",
+                "flex flex-col items-center py-2 transition-colors cursor-pointer",
                 isSettings ? "text-primary font-bold" : "hover:text-foreground",
               )}
             >
