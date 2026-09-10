@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { 
   Trash2, 
   Plus, 
@@ -20,6 +20,8 @@ import {
 } from "./types";
 import { ReportSummaryCards } from "./ReportSummaryCards";
 
+const LEGACY_STORAGE_KEY = "launchpad_gn_reports";
+
 export function ReportsPage() {
   const [rawText, setRawText] = useState("");
   const [period, setPeriod] = useState<"month" | "week" | "year">("month");
@@ -30,9 +32,79 @@ export function ReportsPage() {
 
   const [ledgerOpen, setLedgerOpen] = useState(false);
 
-  // Cloud-synchronized reports directly from WorkspaceStore
+  // Cloud-synchronized reports from WorkspaceStore
   const reports = useWorkspaceStore((s) => s.workspace.reports || []);
   const setReports = useWorkspaceStore((s) => s.setReports);
+
+  // Auto-migrate legacy localStorage reports into cloud workspace state on initial load
+  useEffect(() => {
+    if (reports.length === 0) {
+      try {
+        const legacySaved = localStorage.getItem(LEGACY_STORAGE_KEY);
+        if (legacySaved) {
+          const parsedLegacy: any[] = JSON.parse(legacySaved);
+          if (Array.isArray(parsedLegacy) && parsedLegacy.length > 0) {
+            const migrated: StoredReport[] = parsedLegacy.map((item) => {
+              let d = item.date || "";
+              if (d.includes("-") && d.split("-")[0].length === 4) {
+                const [y, m, day] = d.split("-");
+                d = `${day}-${m}-${y}`;
+              }
+              const [dayStr, mStr, yStr] = d.split("-");
+              const jsDate = new Date(safeInt(yStr), safeInt(mStr) - 1, safeInt(dayStr));
+              const ts = jsDate.getTime();
+
+              let newAmount = safeInt(item.newAmount);
+              let renewAmount = safeInt(item.renewAmount);
+              let balanceAmount = safeInt(item.balanceAmount);
+              let ptCount = safeInt(item.ptCount);
+              let ptAmount = safeInt(item.ptAmount);
+              let todayCollection = safeInt(item.todayCollection);
+
+              const knownSum = newAmount + renewAmount + balanceAmount;
+              if (ptAmount === 0 && todayCollection > knownSum) {
+                ptAmount = todayCollection - knownSum;
+                ptCount = ptCount || 1;
+              }
+
+              return {
+                id: item.id || createId("rep"),
+                date: d,
+                dayName: item.dayName || DAY_NAMES[jsDate.getDay()] || "",
+                sortTimestamp: isNaN(ts) ? Date.now() : ts,
+                newCount: safeInt(item.newCount),
+                newAmount,
+                renewCount: safeInt(item.renewCount),
+                renewAmount,
+                balanceCount: safeInt(item.balanceCount),
+                balanceAmount,
+                ptCount,
+                ptAmount,
+                otherCount: safeInt(item.otherCount),
+                otherAmount: safeInt(item.otherAmount),
+                consultation: safeInt(item.consultation),
+                measurement: safeInt(item.measurement),
+                enquiryCompleted: safeInt(item.enquiryCompleted),
+                paymentCompleted: safeInt(item.paymentCompleted),
+                expiryCompleted: safeInt(item.expiryCompleted),
+                cashTotal: safeInt(item.cashTotal),
+                cardTotal: safeInt(item.cardTotal),
+                todayCollection,
+                availableCash: safeInt(item.availableCash),
+                attendance: safeInt(item.attendance),
+                rawText: item.rawText,
+              };
+            });
+
+            setReports(() => migrated);
+            localStorage.removeItem(LEGACY_STORAGE_KEY); // Clean up legacy key after migration
+          }
+        }
+      } catch (err) {
+        console.error("Migration error:", err);
+      }
+    }
+  }, [reports.length, setReports]);
 
   const handleProcess = () => {
     if (!rawText.trim()) return;
@@ -253,7 +325,7 @@ export function ReportsPage() {
         </div>
       )}
 
-      {/* 1. Performance Summary Table (Sticky Frozen Period Column) */}
+      {/* 1. Performance Summary Table (Unified PT styling, Frozen Period Column) */}
       <div className="border border-border rounded-xl bg-card overflow-hidden shadow-sm">
         <div className="px-3 py-2 bg-muted/40 border-b border-border flex justify-between items-center text-xs font-bold uppercase text-muted-foreground">
           <span>{period === "month" ? "Monthly" : period === "week" ? "Weekly" : "Yearly"} Performance Summary</span>
@@ -267,7 +339,7 @@ export function ReportsPage() {
                 <th className="p-2 border-r border-border text-right">New Adm</th>
                 <th className="p-2 border-r border-border text-right">Renewal</th>
                 <th className="p-2 border-r border-border text-right">Balance</th>
-                <th className="p-2 border-r border-border text-right font-black text-violet-500">PT</th>
+                <th className="p-2 border-r border-border text-right">PT</th>
                 <th className="p-2 border-r border-border text-center">Consult</th>
                 <th className="p-2 border-r border-border text-center">Meas</th>
                 <th className="p-2 border-r border-border text-right">Cash</th>
@@ -283,7 +355,7 @@ export function ReportsPage() {
                   <td className="p-2 border-r border-border text-right">₹{row.newAdm.toLocaleString("en-IN")}</td>
                   <td className="p-2 border-r border-border text-right">₹{row.renew.toLocaleString("en-IN")}</td>
                   <td className="p-2 border-r border-border text-right">₹{row.balance.toLocaleString("en-IN")}</td>
-                  <td className="p-2 border-r border-border text-right font-black text-violet-500">₹{row.pt.toLocaleString("en-IN")}</td>
+                  <td className="p-2 border-r border-border text-right">₹{row.pt.toLocaleString("en-IN")}</td>
                   <td className="p-2 border-r border-border text-center font-bold">{row.consultation}</td>
                   <td className="p-2 border-r border-border text-center font-bold">{row.measurement}</td>
                   <td className="p-2 border-r border-border text-right">₹{row.cash.toLocaleString("en-IN")}</td>
@@ -296,7 +368,7 @@ export function ReportsPage() {
         </div>
       </div>
 
-      {/* 2. Daily Detail Ledger (Sticky Frozen Date Column) */}
+      {/* 2. Daily Detail Ledger (Unified PT styling, Frozen Date Column) */}
       <div className="border border-border rounded-xl bg-card overflow-hidden shadow-sm">
         <div 
           onClick={() => setLedgerOpen((prev) => !prev)}
@@ -325,7 +397,7 @@ export function ReportsPage() {
                   <th className="p-2.5 border-r border-border">New Adm (₹)</th>
                   <th className="p-2.5 border-r border-border">Renewal (₹)</th>
                   <th className="p-2.5 border-r border-border">Balance (₹)</th>
-                  <th className="p-2.5 border-r border-border font-black text-violet-500">PT (₹)</th>
+                  <th className="p-2.5 border-r border-border">PT (₹)</th>
                   <th className="p-2.5 border-r border-border text-center">Consult</th>
                   <th className="p-2.5 border-r border-border text-center">Meas</th>
                   <th className="p-2.5 border-r border-border">Follow-ups (Done)</th>
@@ -350,6 +422,7 @@ export function ReportsPage() {
                         <span>{r.date}</span>
                         <span className="text-[10px] text-primary font-normal ml-1.5">({r.dayName.slice(0, 3)})</span>
                       </td>
+
                       <td className="p-2 border-r border-border">
                         {r.newCount > 0 ? (
                           <span><strong className="text-emerald-500">{r.newCount}</strong> (₹{r.newAmount.toLocaleString("en-IN")})</span>
@@ -367,7 +440,7 @@ export function ReportsPage() {
                       </td>
                       <td className="p-2 border-r border-border">
                         {r.ptCount > 0 ? (
-                          <span><strong className="text-violet-500">{r.ptCount}</strong> (₹{r.ptAmount.toLocaleString("en-IN")})</span>
+                          <span><strong>{r.ptCount}</strong> (₹{r.ptAmount.toLocaleString("en-IN")})</span>
                         ) : <span className="text-muted-foreground">-</span>}
                       </td>
                       <td className="p-2 border-r border-border text-center font-bold">
@@ -423,7 +496,7 @@ export function ReportsPage() {
                     <td className="p-2.5 border-r border-border text-emerald-500">{totals.newCount} (₹{totals.newAmount.toLocaleString("en-IN")})</td>
                     <td className="p-2.5 border-r border-border text-blue-500">{totals.renewCount} (₹{totals.renewAmount.toLocaleString("en-IN")})</td>
                     <td className="p-2.5 border-r border-border text-amber-500">{totals.balanceCount} (₹{totals.balanceAmount.toLocaleString("en-IN")})</td>
-                    <td className="p-2.5 border-r border-border text-violet-500">{totals.ptCount} (₹{totals.ptAmount.toLocaleString("en-IN")})</td>
+                    <td className="p-2.5 border-r border-border">{totals.ptCount} (₹{totals.ptAmount.toLocaleString("en-IN")})</td>
                     <td className="p-2.5 border-r border-border text-center">{totals.consultation}</td>
                     <td className="p-2.5 border-r border-border text-center">{totals.measurement}</td>
                     <td className="p-2.5 border-r border-border text-[10px]">
