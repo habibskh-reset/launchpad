@@ -17,7 +17,7 @@ import { ThemeToggle } from "@/components/auth/ThemeToggle";
 import { useAuth } from "@/components/auth/useAuth";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 import { useUIStore, type ActiveTab } from "@/stores/uiStore";
-import { useSecurityStore } from "@/stores/SecurityStore";
+import { useSecurityStore } from "@/stores/securityStore";
 import { useBackup } from "@/pages/Settings/useBackup";
 import { SyncIndicator } from "./SyncIndicator";
 import {
@@ -59,7 +59,6 @@ export function AppHeader() {
   return (
     <header className="sticky top-0 z-40 bg-card/90 backdrop-blur-md border-b border-border">
       <div className="max-w-6xl mx-auto px-3 sm:px-4 h-14 flex items-center justify-between gap-2 sm:gap-3">
-        {/* Left Brand */}
         <div className="flex items-center gap-3 min-w-0">
           <div 
             onClick={() => handleNav("tasks")} 
@@ -77,7 +76,6 @@ export function AppHeader() {
           </div>
         </div>
 
-        {/* Right Action Tools */}
         <div className="flex items-center gap-1.5 sm:gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -127,7 +125,6 @@ export function AppHeader() {
 
           <ThemeToggle />
 
-          {/* User & Settings Dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="rounded-xl cursor-pointer h-8 w-8" aria-label="Open menu">

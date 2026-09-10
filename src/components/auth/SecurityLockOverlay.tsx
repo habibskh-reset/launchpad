@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Lock, Delete, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useSecurityStore } from "@/stores/SecurityStore";
+import { useSecurityStore } from "@/stores/securityStore";
 import { useAuth } from "./useAuth";
 
 export function SecurityLockOverlay() {
@@ -15,7 +15,6 @@ export function SecurityLockOverlay() {
   const [inputPin, setInputPin] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
 
-  // Global Inactivity Tracker
   useEffect(() => {
     const handleActivity = () => recordActivity();
 
