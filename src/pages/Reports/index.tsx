@@ -25,7 +25,6 @@ export function ReportsPage() {
   const [rawText, setRawText] = useState("");
   const [period, setPeriod] = useState<"month" | "week" | "year">("month");
   
-  // Global modal state from header + local state
   const reportPasteModalOpen = useUIStore((s) => s.reportPasteModalOpen);
   const closeReportPasteModal = useUIStore((s) => s.closeReportPasteModal);
   const openReportPasteModal = useUIStore((s) => s.openReportPasteModal);
@@ -250,11 +249,11 @@ export function ReportsPage() {
               type="button"
               onClick={() => setPeriod("week")}
               className={cn(
-                "px-3 py-1 rounded-lg transition-all font-bold cursor-pointer",
+                "px-3.5 py-1 rounded-lg transition-all font-bold cursor-pointer",
                 period === "week" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"
               )}
             >
-              Weekly (Mon–Sat)
+              Weekly
             </button>
             <button
               type="button"
@@ -279,12 +278,9 @@ export function ReportsPage() {
         </div>
       </div>
 
-      {/* Summary Cards */}
-      <ReportSummaryCards reports={activeReports} />
-
-      {/* Direct Ingest Modal / Card */}
+      {/* Direct Ingest Modal / Box positioned strictly ABOVE the summary cards */}
       {reportPasteModalOpen && (
-        <div className="p-4 bg-card border border-primary/50 rounded-2xl space-y-3 shadow-xl animate-in fade-in-50">
+        <div className="p-4 bg-card border-2 border-primary/60 rounded-2xl space-y-3 shadow-xl animate-in fade-in-50">
           <div className="flex justify-between items-center text-xs font-bold text-muted-foreground">
             <span>PASTE DAILY GYM NATION WHATSAPP REPORT</span>
             <button onClick={closeReportPasteModal} className="text-xs hover:text-foreground">✕</button>
@@ -308,16 +304,19 @@ export function ReportsPage() {
         </div>
       )}
 
+      {/* Summary Cards */}
+      <ReportSummaryCards reports={activeReports} />
+
       {/* 1. Performance Summary Table */}
       <div className="border border-border rounded-xl bg-card overflow-hidden shadow-sm">
         <div className="px-3 py-2 bg-muted/40 border-b border-border flex justify-between items-center text-xs font-bold uppercase text-muted-foreground">
-          <span>{period === "month" ? "Monthly" : period === "week" ? "Weekly (Mon-Sat)" : "Yearly"} Performance Summary</span>
+          <span>{period === "month" ? "Monthly" : period === "week" ? "Weekly" : "Yearly"} Performance Summary</span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-xs text-left border-collapse whitespace-nowrap">
             <thead className="bg-muted/30 border-b border-border text-[10px] uppercase font-bold text-muted-foreground">
               <tr>
-                <th className="p-2 border-r border-border">Period</th>
+                <th className="p-2 border-r border-border sticky left-0 bg-muted/95 z-20">Period</th>
                 <th className="p-2 border-r border-border text-right">Total Collection</th>
                 <th className="p-2 border-r border-border text-right">New Adm</th>
                 <th className="p-2 border-r border-border text-right">Renewal</th>
@@ -333,7 +332,7 @@ export function ReportsPage() {
             <tbody className="divide-y divide-border">
               {periodicBreakdown.map((row, idx) => (
                 <tr key={idx} className="hover:bg-muted/20 font-medium">
-                  <td className="p-2 font-bold border-r border-border text-foreground">{row.label}</td>
+                  <td className="p-2 font-bold border-r border-border text-foreground sticky left-0 bg-card z-10">{row.label}</td>
                   <td className="p-2 border-r border-border text-right font-black text-emerald-500">₹{row.collection.toLocaleString("en-IN")}</td>
                   <td className="p-2 border-r border-border text-right">₹{row.newAdm.toLocaleString("en-IN")}</td>
                   <td className="p-2 border-r border-border text-right">₹{row.renew.toLocaleString("en-IN")}</td>
@@ -374,9 +373,9 @@ export function ReportsPage() {
         {ledgerOpen && (
           <div className="overflow-x-auto max-h-[600px]">
             <table className="w-full text-xs text-left border-collapse whitespace-nowrap">
-              <thead className="bg-muted/60 sticky top-0 z-10 border-b border-border text-[10px] uppercase font-bold text-muted-foreground shadow-sm">
+              <thead className="bg-muted/60 sticky top-0 z-30 border-b border-border text-[10px] uppercase font-bold text-muted-foreground shadow-sm">
                 <tr>
-                  <th className="p-2.5 border-r border-border">Date & Day</th>
+                  <th className="p-2.5 border-r border-border sticky left-0 bg-muted/95 z-40">Date & Day</th>
                   <th className="p-2.5 border-r border-border">New Adm (₹)</th>
                   <th className="p-2.5 border-r border-border">Renewal (₹)</th>
                   <th className="p-2.5 border-r border-border">Balance (₹)</th>
@@ -401,7 +400,7 @@ export function ReportsPage() {
                 ) : (
                   activeReports.map((r) => (
                     <tr key={r.id} className="hover:bg-muted/20 font-medium">
-                      <td className="p-2 border-r border-border font-bold text-foreground">
+                      <td className="p-2 border-r border-border font-bold text-foreground sticky left-0 bg-card z-10">
                         <span>{r.date}</span>
                         <span className="text-[10px] text-primary font-normal ml-1.5">({r.dayName.slice(0, 3)})</span>
                       </td>
@@ -474,7 +473,7 @@ export function ReportsPage() {
               {activeReports.length > 0 && (
                 <tfoot className="bg-muted/50 border-t-2 border-border font-black text-xs">
                   <tr>
-                    <td className="p-2.5 border-r border-border uppercase">TOTAL</td>
+                    <td className="p-2.5 border-r border-border uppercase sticky left-0 bg-muted z-10">TOTAL</td>
                     <td className="p-2.5 border-r border-border text-emerald-500">{totals.newCount} (₹{totals.newAmount.toLocaleString("en-IN")})</td>
                     <td className="p-2.5 border-r border-border text-blue-500">{totals.renewCount} (₹{totals.renewAmount.toLocaleString("en-IN")})</td>
                     <td className="p-2.5 border-r border-border text-amber-500">{totals.balanceCount} (₹{totals.balanceAmount.toLocaleString("en-IN")})</td>

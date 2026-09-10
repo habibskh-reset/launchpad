@@ -19,16 +19,16 @@ export function DashboardPage() {
 
   return (
     <main className="flex-1 max-w-6xl mx-auto w-full p-2.5 sm:p-4 md:p-6 flex flex-col gap-3.5 pb-20 lg:pb-8">
-      {/* Top Header: Clean Tab Selector & Search */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-border/40 pb-2.5">
-        <div className="flex rounded-xl bg-muted p-1 text-xs font-semibold gap-1 w-full sm:w-auto">
+      {/* Top Header: Hidden on mobile (handled by bottom nav), visible on desktop */}
+      <div className="hidden lg:flex items-center justify-between gap-2.5 border-b border-border/40 pb-2.5">
+        <div className="flex rounded-xl bg-muted p-1 text-xs font-semibold gap-1">
           {TABS.map((t) => (
             <button
               key={t.id}
               type="button"
               onClick={() => setActiveTab(t.id)}
               className={cn(
-                "flex-1 sm:flex-none px-3.5 py-1.5 rounded-lg transition-all cursor-pointer text-center",
+                "px-3.5 py-1.5 rounded-lg transition-all cursor-pointer text-center",
                 activeTab === t.id
                   ? "bg-background text-foreground shadow-sm font-bold"
                   : "text-muted-foreground hover:text-foreground",
@@ -39,8 +39,7 @@ export function DashboardPage() {
           ))}
         </div>
 
-        {/* Minimal Global Search */}
-        <div className="w-full sm:w-72">
+        <div className="w-72">
           <SearchBar
             value={search}
             onChange={setSearch}
@@ -50,7 +49,7 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {/* Dynamic Views in Clean Order */}
+      {/* Dynamic Views */}
       {activeTab === "tasks" && <TasksPage searchTerm={search} />}
       {activeTab === "reports" && <ReportsPage />}
       {activeTab === "launchpad" && <LaunchpadPage searchTerm={search} />}

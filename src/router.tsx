@@ -14,12 +14,6 @@ const DashboardPage = lazy(() =>
   })),
 );
 
-const SettingsPage = lazy(() =>
-  import("@/pages/Settings").then((module) => ({
-    default: module.SettingsPage,
-  })),
-);
-
 function PageFallback() {
   return (
     <main className="flex-1 max-w-5xl mx-auto w-full p-6 flex items-center justify-center">
@@ -57,11 +51,7 @@ export const router = createBrowserRouter([
       },
       {
         path: "/settings",
-        element: (
-          <Suspense fallback={<PageFallback />}>
-            <SettingsPage />
-          </Suspense>
-        ),
+        element: <Navigate to="/dashboard" replace />,
       },
       {
         path: "*",

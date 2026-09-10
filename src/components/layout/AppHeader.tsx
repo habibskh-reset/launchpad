@@ -3,23 +3,24 @@ import {
   Download, 
   LogOut, 
   MoreVertical, 
-  Settings, 
+  ShieldCheck, 
   Upload, 
   Plus, 
   Link as LinkIcon, 
   FolderPlus, 
   FileText, 
-  BarChart3
+  BarChart3,
+  Lock
 } from "lucide-react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/auth/ThemeToggle";
 import { useAuth } from "@/components/auth/useAuth";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 import { useUIStore, type ActiveTab } from "@/stores/uiStore";
+import { useSecurityStore } from "@/stores/securityStore";
 import { useBackup } from "@/pages/Settings/useBackup";
 import { SyncIndicator } from "./SyncIndicator";
-import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,16 +35,15 @@ export function AppHeader() {
   const title = useWorkspaceStore((s) => s.workspace.settings.title);
   const { logout } = useAuth();
   const { exportBackup, importBackup } = useBackup();
-  const location = useLocation();
   const navigate = useNavigate();
 
-  const activeTab = useUIStore((s) => s.activeTab);
   const setActiveTab = useUIStore((s) => s.setActiveTab);
   const openAddLink = useUIStore((s) => s.openAddLink);
   const openAddFolder = useUIStore((s) => s.openAddFolder);
   const openReportPasteModal = useUIStore((s) => s.openReportPasteModal);
 
-  const isSettings = location.pathname.includes("/settings");
+  const openSecuritySettings = useSecurityStore((s) => s.openSettingsModal);
+  const setIsLocked = useSecurityStore((s) => s.setIsLocked);
 
   const avatarUrl =
     user?.photoURL ??
@@ -53,35 +53,31 @@ export function AppHeader() {
 
   const handleNav = (tab: ActiveTab) => {
     setActiveTab(tab);
-    if (location.pathname !== "/dashboard") {
-      navigate("/dashboard");
-    }
+    navigate("/dashboard");
   };
 
   return (
     <header className="sticky top-0 z-40 bg-card/90 backdrop-blur-md border-b border-border">
       <div className="max-w-6xl mx-auto px-3 sm:px-4 h-14 flex items-center justify-between gap-2 sm:gap-3">
-        {/* Left Brand */}
-        <div className="flex items-center gap-3 min-w-0">
-          <div 
-            onClick={() => handleNav("tasks")} 
-            className="flex items-center gap-2 min-w-0 cursor-pointer select-none"
-          >
-            <div className="w-8 h-8 rounded-xl bg-primary text-primary-foreground flex items-center justify-center flex-shrink-0 shadow-sm">
-              <Compass className="h-4 w-4" strokeWidth={2.5} />
-            </div>
-            <div className="min-w-0">
-              <h1 className="text-xs font-bold tracking-tight truncate leading-tight">
-                {title}
-              </h1>
-              <SyncIndicator />
-            </div>
+        {/* Brand */}
+        <div 
+          onClick={() => handleNav("tasks")} 
+          className="flex items-center gap-2 min-w-0 cursor-pointer select-none"
+        >
+          <div className="w-8 h-8 rounded-xl bg-primary text-primary-foreground flex items-center justify-center flex-shrink-0 shadow-sm">
+            <Compass className="h-4 w-4" strokeWidth={2.5} />
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-xs font-bold tracking-tight truncate leading-tight">
+              {title}
+            </h1>
+            <SyncIndicator />
           </div>
         </div>
 
-        {/* Right Action Tools: + Quick Action Dropdown, Theme, Settings Menu */}
+        {/* Right Tools */}
         <div className="flex items-center gap-1.5 sm:gap-2">
-          {/* Universal Create Dropdown */}
+          {/* Universal Quick Action Button */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -130,7 +126,7 @@ export function AppHeader() {
 
           <ThemeToggle />
 
-          {/* User & Settings Dropdown */}
+          {/* User Profile & Security Menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="rounded-xl cursor-pointer h-8 w-8" aria-label="Open menu">
@@ -158,19 +154,22 @@ export function AppHeader() {
                   </div>
                 </DropdownMenuLabel>
               )}
-              <DropdownMenuItem asChild>
-                <Link to="/settings" className="cursor-pointer">
-                  <Settings className="h-3.5 w-3.5 text-muted-foreground" />
-                  Settings & Data
-                </Link>
+              <DropdownMenuItem onSelect={openSecuritySettings} className="cursor-pointer font-semibold">
+                <ShieldCheck className="h-3.5 w-3.5 text-primary mr-2" />
+                Security & Data Settings
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={exportBackup} className="cursor-pointer">
-                <Download className="h-3.5 w-3.5 text-muted-foreground" />
+              <DropdownMenuItem onSelect={() => setIsLocked(true)} className="cursor-pointer font-semibold">
+                <Lock className="h-3.5 w-3.5 text-amber-500 mr-2" />
+                Lock App Now
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={exportBackup} className="cursor-pointer text-xs">
+                <Download className="h-3.5 w-3.5 text-muted-foreground mr-2" />
                 Export JSON Backup
               </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <label className="cursor-pointer">
-                  <Upload className="h-3.5 w-3.5 text-muted-foreground" />
+              <DropdownMenuItem asChild className="cursor-pointer text-xs">
+                <label>
+                  <Upload className="h-3.5 w-3.5 text-muted-foreground mr-2" />
                   Import JSON Backup
                   <input
                     type="file"
@@ -181,8 +180,8 @@ export function AppHeader() {
                 </label>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem danger onSelect={logout} className="cursor-pointer">
-                <LogOut className="h-3.5 w-3.5" />
+              <DropdownMenuItem danger onSelect={logout} className="cursor-pointer font-semibold">
+                <LogOut className="h-3.5 w-3.5 mr-2" />
                 Sign Out
               </DropdownMenuItem>
             </DropdownMenuContent>
