@@ -20,7 +20,8 @@ export interface WorkspaceStoreState {
   workspace: Workspace;
   sync: SyncState;
   setUser: (user: User | null) => void;
-  setWorkspace: (workspace: Workspace) => void;
+  // Make setWorkspace support both direct objects AND functional updaters
+  setWorkspace: (updaterOrWorkspace: Workspace | ((prev: Workspace) => Workspace)) => void;
   setSync: (sync: SyncState) => void;
   setTodos: (updater: (todos: TodoItem[]) => TodoItem[]) => void;
   setNotes: (updater: (notes: NoteItem[]) => NoteItem[]) => void;
@@ -35,8 +36,18 @@ export const useWorkspaceStore = create<WorkspaceStoreState>((set) => ({
     message: "Initializing...",
   },
   setUser: (user) => set({ user }),
-  setWorkspace: (workspace) => set({ workspace }),
+  
+  // Safely handle (prev) => ... logic
+  setWorkspace: (updaterOrWorkspace) =>
+    set((state) => ({
+      workspace:
+        typeof updaterOrWorkspace === "function"
+          ? updaterOrWorkspace(state.workspace)
+          : updaterOrWorkspace,
+    })),
+    
   setSync: (sync) => set({ sync }),
+  
   setTodos: (updater) =>
     set((state) => ({
       workspace: {
@@ -44,6 +55,7 @@ export const useWorkspaceStore = create<WorkspaceStoreState>((set) => ({
         todos: updater(state.workspace.todos || []),
       },
     })),
+    
   setNotes: (updater) =>
     set((state) => ({
       workspace: {
@@ -51,6 +63,7 @@ export const useWorkspaceStore = create<WorkspaceStoreState>((set) => ({
         notes: updater(state.workspace.notes || []),
       },
     })),
+    
   setReports: (updater) =>
     set((state) => ({
       workspace: {
