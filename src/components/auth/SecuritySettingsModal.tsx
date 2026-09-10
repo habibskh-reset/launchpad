@@ -3,7 +3,7 @@ import { Shield, KeyRound, Clock, Check, Download, Upload } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useSecurityStore, type TimeoutOption } from "@/stores/SecurityStore";
+import { useSecurityStore, type TimeoutOption } from "@/stores/securityStore";
 import { useBackup } from "@/pages/Settings/useBackup";
 import { cn } from "@/lib/utils";
 
