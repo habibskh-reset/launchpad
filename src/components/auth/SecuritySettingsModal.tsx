@@ -126,7 +126,7 @@ export function SecuritySettingsModal() {
             </div>
           </div>
 
-          {/* 4. JSON Backup & Restore directly in Settings Modal */}
+          {/* 4. JSON Backup & Restore */}
           <div className="pt-2 border-t border-border space-y-2">
             <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
               Workspace Data Backup
