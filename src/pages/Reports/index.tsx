@@ -2,7 +2,6 @@ import { useState, useMemo, useEffect } from "react";
 import { 
   Trash2, 
   Plus, 
-  Table as TableIcon,
   ChevronDown, 
   ChevronUp
 } from "lucide-react";
@@ -32,11 +31,9 @@ export function ReportsPage() {
 
   const [ledgerOpen, setLedgerOpen] = useState(false);
 
-  // Cloud-synchronized reports from WorkspaceStore
   const reports = useWorkspaceStore((s) => s.workspace.reports || []);
   const setReports = useWorkspaceStore((s) => s.setReports);
 
-  // Auto-migrate legacy localStorage reports into cloud workspace state on initial load
   useEffect(() => {
     if (reports.length === 0) {
       try {
@@ -81,7 +78,7 @@ export function ReportsPage() {
                 ptCount,
                 ptAmount,
                 otherCount: safeInt(item.otherCount),
-                otherAmount: safeInt(item.otherAmount),
+                otherAmount,
                 consultation: safeInt(item.consultation),
                 measurement: safeInt(item.measurement),
                 enquiryCompleted: safeInt(item.enquiryCompleted),
@@ -97,7 +94,7 @@ export function ReportsPage() {
             });
 
             setReports(() => migrated);
-            localStorage.removeItem(LEGACY_STORAGE_KEY); // Clean up legacy key after migration
+            localStorage.removeItem(LEGACY_STORAGE_KEY);
           }
         }
       } catch (err) {
@@ -250,7 +247,7 @@ export function ReportsPage() {
 
   return (
     <div className="flex flex-col gap-4 max-w-full mx-auto w-full pb-20 px-1 sm:px-3">
-      {/* Header & Period Switcher */}
+      {/* 1. Header & Period Switcher */}
       <div className="flex flex-wrap items-center justify-between gap-2.5">
         <div className="flex items-center gap-2">
           <div className="flex rounded-xl bg-muted p-1 text-xs font-semibold gap-1">
@@ -297,14 +294,18 @@ export function ReportsPage() {
         </div>
       </div>
 
-      <ReportSummaryCards reports={activeReports} />
-
-      {/* Direct Ingest Modal */}
+      {/* 2. Paste Container (MOVED DIRECTLY ABOVE SUMMARY CARDS) */}
       {reportPasteModalOpen && (
-        <div className="p-4 bg-card border border-primary/50 rounded-2xl space-y-3 shadow-xl animate-in fade-in-50">
-          <div className="flex justify-between items-center text-xs font-bold text-muted-foreground">
-            <span>PASTE DAILY GYM NATION WHATSAPP REPORT</span>
-            <button onClick={closeReportPasteModal} className="text-xs hover:text-foreground">✕</button>
+        <div className="p-4 bg-card border-2 border-primary/40 rounded-2xl space-y-3 shadow-xl animate-in fade-in-50">
+          <div className="flex justify-between items-center text-xs font-bold text-foreground">
+            <span className="uppercase text-primary font-bold">Paste Daily Gym Nation WhatsApp Report</span>
+            <button 
+              type="button"
+              onClick={closeReportPasteModal} 
+              className="px-2.5 py-1 rounded-lg bg-muted text-xs hover:text-foreground font-semibold cursor-pointer transition-colors"
+            >
+              ✕ Close
+            </button>
           </div>
           <textarea
             rows={6}
@@ -315,17 +316,20 @@ export function ReportsPage() {
             autoFocus
           />
           <div className="flex justify-end gap-2">
-            <Button size="sm" variant="secondary" onClick={closeReportPasteModal} className="font-bold text-xs rounded-xl">
+            <Button size="sm" variant="secondary" onClick={closeReportPasteModal} className="font-bold text-xs rounded-xl cursor-pointer">
               Cancel
             </Button>
-            <Button size="sm" onClick={handleProcess} disabled={!rawText.trim()} className="font-bold text-xs rounded-xl">
-              Process & Add Row
+            <Button size="sm" onClick={handleProcess} disabled={!rawText.trim()} className="font-bold text-xs rounded-xl cursor-pointer">
+              Process & Add Entry
             </Button>
           </div>
         </div>
       )}
 
-      {/* 1. Performance Summary Table (Unified PT styling, Frozen Period Column) */}
+      {/* 3. Summary Cards */}
+      <ReportSummaryCards reports={activeReports} />
+
+      {/* 4. Performance Summary Table */}
       <div className="border border-border rounded-xl bg-card overflow-hidden shadow-sm">
         <div className="px-3 py-2 bg-muted/40 border-b border-border flex justify-between items-center text-xs font-bold uppercase text-muted-foreground">
           <span>{period === "month" ? "Monthly" : period === "week" ? "Weekly" : "Yearly"} Performance Summary</span>
@@ -368,7 +372,7 @@ export function ReportsPage() {
         </div>
       </div>
 
-      {/* 2. Daily Detail Ledger (Unified PT styling, Frozen Date Column) */}
+      {/* 5. Daily Detail Ledger */}
       <div className="border border-border rounded-xl bg-card overflow-hidden shadow-sm">
         <div 
           onClick={() => setLedgerOpen((prev) => !prev)}

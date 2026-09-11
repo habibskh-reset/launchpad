@@ -31,6 +31,8 @@ export interface LinkItem {
 
 export type TaskPriority = "low" | "medium" | "high";
 
+export type ReminderStatus = "pending" | "triggered" | "dismissed";
+
 export interface TodoItem {
   id: string;
   text: string;
@@ -38,6 +40,9 @@ export interface TodoItem {
   dueDate?: string;
   dueTime?: string;
   reminder?: boolean;
+  reminderOffset?: number; // 0, 5, 15, 30, 60 minutes before
+  reminderStatus?: ReminderStatus;
+  audioAlert?: boolean;
   priority?: TaskPriority;
   date: string;
 }

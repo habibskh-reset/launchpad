@@ -1,5 +1,4 @@
 import { create } from "zustand";
-import type { User } from "firebase/auth";
 import type { AppError } from "@/shared/api/errors";
 import {
   cloneDefaultWorkspace,
@@ -8,6 +7,9 @@ import {
 } from "@/types/workspace";
 import type { NoteItem } from "@/pages/Notes/notes.types";
 import type { StoredReport } from "@/pages/Reports/types";
+import type { AppUser } from "@/types/auth";
+
+export type AuthState = "initializing" | "authenticated" | "unauthenticated";
 
 export interface SyncState {
   status: "idle" | "active" | "offline" | "error";
@@ -16,11 +18,11 @@ export interface SyncState {
 }
 
 export interface WorkspaceStoreState {
-  user: User | null;
+  user: AppUser | null;
+  authState: AuthState;
   workspace: Workspace;
   sync: SyncState;
-  setUser: (user: User | null) => void;
-  // Make setWorkspace support both direct objects AND functional updaters
+  setUser: (user: AppUser | null) => void;
   setWorkspace: (updaterOrWorkspace: Workspace | ((prev: Workspace) => Workspace)) => void;
   setSync: (sync: SyncState) => void;
   setTodos: (updater: (todos: TodoItem[]) => TodoItem[]) => void;
@@ -30,14 +32,19 @@ export interface WorkspaceStoreState {
 
 export const useWorkspaceStore = create<WorkspaceStoreState>((set) => ({
   user: null,
+  authState: "initializing",
   workspace: cloneDefaultWorkspace(),
   sync: {
     status: "idle",
     message: "Initializing...",
   },
-  setUser: (user) => set({ user }),
   
-  // Safely handle (prev) => ... logic
+  setUser: (user) => 
+    set({ 
+      user, 
+      authState: user ? "authenticated" : "unauthenticated" 
+    }),
+  
   setWorkspace: (updaterOrWorkspace) =>
     set((state) => ({
       workspace:

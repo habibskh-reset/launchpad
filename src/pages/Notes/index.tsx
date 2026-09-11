@@ -1,9 +1,10 @@
 import { useState, useMemo } from "react";
-import { Edit3, FileText, Pin, Plus, Trash2 } from "lucide-react";
+import { Edit3, FileText, Pin, Plus, Trash2, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { useNotes } from "./useNotes";
 import { NoteModal } from "./NoteModal";
+import { NoteViewModal } from "./NoteViewModal";
 import { cn } from "@/lib/utils";
 import type { NoteItem } from "./notes.types";
 
@@ -21,7 +22,8 @@ export function NotesPage({ searchTerm = "" }: { searchTerm?: string }) {
   const { confirm, ConfirmDialogElement } = useConfirmDialog();
 
   const [modalOpen, setModalOpen] = useState(false);
-  const [editingNote, setEditingNote] = useState<NoteItem | null>(null);
+  const [viewModalOpen, setViewModalOpen] = useState(false);
+  const [activeNote, setActiveNote] = useState<NoteItem | null>(null);
 
   const filteredNotes = useMemo(() => {
     const q = searchTerm.toLowerCase().trim();
@@ -32,24 +34,30 @@ export function NotesPage({ searchTerm = "" }: { searchTerm?: string }) {
   }, [notes, searchTerm]);
 
   const handleOpenAdd = () => {
-    setEditingNote(null);
+    setActiveNote(null);
     setModalOpen(true);
   };
 
   const handleOpenEdit = (note: NoteItem) => {
-    setEditingNote(note);
+    setActiveNote(note);
     setModalOpen(true);
   };
 
+  const handleOpenView = (note: NoteItem) => {
+    setActiveNote(note);
+    setViewModalOpen(true);
+  };
+
   const handleDelete = async (note: NoteItem) => {
-    if (await confirm(`Delete note "${note.title}"?`)) {
+    const ok = await confirm(`Permanently delete note "${note.title}"?`);
+    if (ok) {
       removeNote(note.id);
     }
   };
 
   const handleSave = (payload: { title: string; content: string; color: NoteItem["color"] }) => {
-    if (editingNote) {
-      updateNote(editingNote.id, payload);
+    if (activeNote) {
+      updateNote(activeNote.id, payload);
     } else {
       addNote(payload);
     }
@@ -92,10 +100,11 @@ export function NotesPage({ searchTerm = "" }: { searchTerm?: string }) {
               <div
                 key={note.id}
                 className={cn(
-                  "group relative rounded-2xl border p-4 flex flex-col justify-between transition-all shadow-sm",
+                  "group relative rounded-2xl border p-4 flex flex-col justify-between transition-all shadow-sm cursor-pointer hover:border-primary/50",
                   color.bg,
                   color.border,
                 )}
+                onClick={() => handleOpenView(note)}
               >
                 <div>
                   <div className="flex items-start justify-between gap-2 mb-2">
@@ -104,9 +113,12 @@ export function NotesPage({ searchTerm = "" }: { searchTerm?: string }) {
                     </h3>
                     <button
                       type="button"
-                      onClick={() => togglePin(note.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        togglePin(note.id);
+                      }}
                       className={cn(
-                        "p-1 rounded-lg transition-colors flex-shrink-0",
+                        "p-1 rounded-lg transition-colors flex-shrink-0 cursor-pointer",
                         note.pinned ? "text-primary hover:text-primary/80" : "text-muted-foreground/50 hover:text-foreground",
                       )}
                       title={note.pinned ? "Unpin note" : "Pin note"}
@@ -115,29 +127,44 @@ export function NotesPage({ searchTerm = "" }: { searchTerm?: string }) {
                     </button>
                   </div>
 
-                  <p className="text-xs text-muted-foreground whitespace-pre-wrap leading-relaxed line-clamp-6">
+                  <p className="text-xs text-muted-foreground whitespace-pre-wrap leading-relaxed line-clamp-5">
                     {note.content}
                   </p>
                 </div>
 
-                <div className="pt-4 flex items-center justify-between border-t border-border/50 mt-4 text-[10px] text-muted-foreground">
+                <div 
+                  className="pt-3 flex items-center justify-between border-t border-border/50 mt-4 text-[10px] text-muted-foreground"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <span>{new Date(note.updatedAt).toLocaleDateString()}</span>
-                  <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+
+                  {/* Safely separated Action buttons */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenView(note)}
+                      className="px-2 py-1 rounded-md bg-muted/80 hover:bg-muted text-foreground transition-colors flex items-center gap-1 font-medium"
+                      title="View Note"
+                    >
+                      <Eye className="h-3 w-3 text-muted-foreground" />
+                      <span>View</span>
+                    </button>
                     <button
                       type="button"
                       onClick={() => handleOpenEdit(note)}
-                      className="p-1 rounded hover:bg-background/80 text-muted-foreground hover:text-foreground transition-colors"
-                      title="Edit"
+                      className="px-2 py-1 rounded-md bg-muted/80 hover:bg-muted text-foreground transition-colors flex items-center gap-1 font-medium"
+                      title="Edit Note"
                     >
-                      <Edit3 className="h-3 w-3" />
+                      <Edit3 className="h-3 w-3 text-muted-foreground" />
+                      <span>Edit</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => handleDelete(note)}
-                      className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                      title="Delete"
+                      className="p-1 rounded-md text-destructive/70 hover:text-destructive hover:bg-destructive/10 transition-colors ml-1"
+                      title="Delete Note"
                     >
-                      <Trash2 className="h-3 w-3" />
+                      <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 </div>
@@ -150,8 +177,14 @@ export function NotesPage({ searchTerm = "" }: { searchTerm?: string }) {
       <NoteModal
         open={modalOpen}
         onOpenChange={setModalOpen}
-        note={editingNote}
+        note={activeNote}
         onSave={handleSave}
+      />
+      <NoteViewModal
+        open={viewModalOpen}
+        onOpenChange={setViewModalOpen}
+        note={activeNote}
+        onEdit={handleOpenEdit}
       />
       {ConfirmDialogElement}
     </div>

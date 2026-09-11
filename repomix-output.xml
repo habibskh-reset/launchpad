@@ -50,8 +50,6 @@ src/
     auth/
       AuthGuard.tsx
       LoginOverlay.tsx
-      SecurityLockOverlay.tsx
-      SecuritySettingsModal.tsx
       ThemeToggle.tsx
       useAuth.ts
     layout/
@@ -112,7 +110,6 @@ src/
     api/
       errors.ts
   stores/
-    SecurityStore.ts
     uiStore.ts
     workspaceStore.ts
   types/
@@ -125,6 +122,7 @@ src/
   vite-env.d.ts
 .env.example
 .gitignore
+.npmrc
 components.json
 index.html
 package.json
@@ -175,17 +173,6 @@ This section contains the contents of the repository's files.
       "url": "/dashboard"
     }
   ]
-}
-</file>
-
-<file path="src/components/auth/AuthGuard.tsx">
-import { type ReactNode } from "react";
-import { useWorkspaceStore } from "@/stores/workspaceStore";
-
-export function AuthGuard({ children }: { children: ReactNode }) {
-  const user = useWorkspaceStore((state) => state.user);
-  if (!user) return null;
-  return <>{children}</>;
 }
 </file>
 
@@ -240,284 +227,6 @@ export function LoginOverlay() {
         </div>
       ) : null}
     </div>
-  );
-}
-</file>
-
-<file path="src/components/auth/SecurityLockOverlay.tsx">
-import { useState } from "react";
-import { Lock, Delete, LogOut } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { useSecurityStore } from "@/stores/securityStore";
-import { useAuth } from "./useAuth";
-
-export function SecurityLockOverlay() {
-  const isLocked = useSecurityStore((s) => s.isLocked);
-  const setIsLocked = useSecurityStore((s) => s.setIsLocked);
-  const authMethod = useSecurityStore((s) => s.authMethod);
-  const correctPin = useSecurityStore((s) => s.pinCode);
-  const { logout } = useAuth();
-
-  const [inputPin, setInputPin] = useState("");
-  const [errorMsg, setErrorMsg] = useState("");
-
-  if (!isLocked) return null;
-
-  const handleDigit = (digit: string) => {
-    if (inputPin.length >= 6) return;
-    const next = inputPin + digit;
-    setInputPin(next);
-    setErrorMsg("");
-
-    if (correctPin && next === correctPin) {
-      setIsLocked(false);
-      setInputPin("");
-    } else if (correctPin && next.length >= correctPin.length) {
-      setErrorMsg("Incorrect PIN");
-    }
-  };
-
-  const handleBackspace = () => {
-    setInputPin((prev) => prev.slice(0, -1));
-    setErrorMsg("");
-  };
-
-  return (
-    <div className="fixed inset-0 z-[100] bg-background/95 backdrop-blur-xl flex flex-col items-center justify-center p-4 select-none">
-      <div className="max-w-xs w-full flex flex-col items-center text-center space-y-4">
-        <div className="w-14 h-14 rounded-2xl bg-primary/10 text-primary flex items-center justify-center shadow-inner">
-          <Lock className="w-7 h-7 stroke-[2.5]" />
-        </div>
-
-        <div>
-          <h2 className="text-lg font-black tracking-tight">App Locked</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {authMethod === "pin" ? "Enter your PIN code to unlock" : "Session locked for security"}
-          </p>
-        </div>
-
-        {authMethod === "pin" && correctPin ? (
-          <div className="w-full space-y-4">
-            {/* PIN Dots Indicator */}
-            <div className="flex justify-center gap-3 py-2">
-              {Array.from({ length: correctPin.length }).map((_, idx) => (
-                <div
-                  key={idx}
-                  className={`w-3.5 h-3.5 rounded-full border border-primary transition-all ${
-                    inputPin.length > idx ? "bg-primary scale-110" : "bg-transparent"
-                  }`}
-                />
-              ))}
-            </div>
-
-            {errorMsg && <p className="text-xs font-bold text-destructive">{errorMsg}</p>}
-
-            {/* Keypad */}
-            <div className="grid grid-cols-3 gap-2 pt-2">
-              {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((num) => (
-                <button
-                  key={num}
-                  type="button"
-                  onClick={() => handleDigit(num)}
-                  className="h-12 rounded-xl bg-card border border-border text-base font-bold text-foreground hover:bg-muted active:scale-95 transition-all cursor-pointer shadow-sm"
-                >
-                  {num}
-                </button>
-              ))}
-              <div />
-              <button
-                type="button"
-                onClick={() => handleDigit("0")}
-                className="h-12 rounded-xl bg-card border border-border text-base font-bold text-foreground hover:bg-muted active:scale-95 transition-all cursor-pointer shadow-sm"
-              >
-                0
-              </button>
-              <button
-                type="button"
-                onClick={handleBackspace}
-                className="h-12 rounded-xl bg-card border border-border flex items-center justify-center text-muted-foreground hover:text-foreground active:scale-95 transition-all cursor-pointer shadow-sm"
-              >
-                <Delete className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="pt-2 w-full">
-            <Button
-              onClick={() => setIsLocked(false)}
-              className="w-full font-bold rounded-xl h-10 cursor-pointer"
-            >
-              Resume Session
-            </Button>
-          </div>
-        )}
-
-        <button
-          type="button"
-          onClick={() => {
-            setIsLocked(false);
-            logout();
-          }}
-          className="text-xs text-muted-foreground hover:text-destructive flex items-center gap-1.5 pt-2 cursor-pointer transition-colors"
-        >
-          <LogOut className="w-3.5 h-3.5" />
-          <span>Sign Out / Switch Account</span>
-        </button>
-      </div>
-    </div>
-  );
-}
-</file>
-
-<file path="src/components/auth/SecuritySettingsModal.tsx">
-import { useState, type FormEvent } from "react";
-import { Shield, KeyRound, Clock, Check, Download, Upload } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { useSecurityStore, type AuthMethod, type TimeoutOption } from "@/stores/securityStore";
-import { useBackup } from "@/pages/Settings/useBackup";
-import { cn } from "@/lib/utils";
-
-export function SecuritySettingsModal() {
-  const open = useSecurityStore((s) => s.settingsModalOpen);
-  const close = useSecurityStore((s) => s.closeSettingsModal);
-  const authMethod = useSecurityStore((s) => s.authMethod);
-  const setAuthMethod = useSecurityStore((s) => s.setAuthMethod);
-  const pinCode = useSecurityStore((s) => s.pinCode);
-  const setPinCode = useSecurityStore((s) => s.setPinCode);
-  const timeoutMinutes = useSecurityStore((s) => s.timeoutMinutes);
-  const setTimeoutMinutes = useSecurityStore((s) => s.setTimeoutMinutes);
-
-  const { exportBackup, importBackup } = useBackup();
-
-  const [newPin, setNewPin] = useState("");
-  const [pinSaved, setPinSaved] = useState(false);
-
-  const handleSavePin = (e: FormEvent) => {
-    e.preventDefault();
-    if (newPin.length >= 4 && newPin.length <= 6) {
-      setPinCode(newPin);
-      setPinSaved(true);
-      setTimeout(() => setPinSaved(false), 2000);
-      setNewPin("");
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={(v) => !v && close()}>
-      <DialogContent className="max-w-md p-5 space-y-4">
-        <DialogHeader>
-          <DialogTitle className="text-sm font-black flex items-center gap-2">
-            <Shield className="w-4 h-4 text-primary" />
-            <span>Security, PIN & Data Settings</span>
-          </DialogTitle>
-        </DialogHeader>
-
-        <div className="space-y-4 text-xs">
-          {/* 1. Login & Lock Method Selection */}
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-              <KeyRound className="w-3.5 h-3.5 text-primary" /> Preferred Lock Method
-            </label>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setAuthMethod("google")}
-                className={cn(
-                  "p-2.5 rounded-xl border text-xs font-bold transition-all text-center cursor-pointer",
-                  authMethod === "google"
-                    ? "bg-primary text-primary-foreground border-primary shadow-sm"
-                    : "border-border bg-muted/40 text-muted-foreground hover:text-foreground",
-                )}
-              >
-                Google Auth
-              </button>
-              <button
-                type="button"
-                onClick={() => setAuthMethod("pin")}
-                className={cn(
-                  "p-2.5 rounded-xl border text-xs font-bold transition-all text-center cursor-pointer",
-                  authMethod === "pin"
-                    ? "bg-primary text-primary-foreground border-primary shadow-sm"
-                    : "border-border bg-muted/40 text-muted-foreground hover:text-foreground",
-                )}
-              >
-                PIN Passcode
-              </button>
-            </div>
-          </div>
-
-          {/* 2. Configure 4-6 Digit PIN */}
-          {authMethod === "pin" && (
-            <form onSubmit={handleSavePin} className="p-3 bg-muted/30 border border-border rounded-xl space-y-2">
-              <div className="flex justify-between items-center">
-                <span className="font-bold text-foreground text-[11px]">
-                  {pinCode ? "Change Current PIN" : "Set New Passcode (4-6 Digits)"}
-                </span>
-                {pinCode && <span className="text-[10px] text-emerald-500 font-bold">PIN Active</span>}
-              </div>
-              <div className="flex gap-2">
-                <Input
-                  type="password"
-                  inputMode="numeric"
-                  maxLength={6}
-                  placeholder="Enter 4-6 digit PIN"
-                  value={newPin}
-                  onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ""))}
-                  className="h-8 text-xs font-mono bg-background"
-                />
-                <Button type="submit" size="sm" disabled={newPin.length < 4} className="h-8 px-3 text-xs font-bold shrink-0">
-                  {pinSaved ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : "Save"}
-                </Button>
-              </div>
-            </form>
-          )}
-
-          {/* 3. Session Inactivity Timeout */}
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5 text-primary" /> Inactivity Auto-Lock
-            </label>
-            <div className="grid grid-cols-4 gap-1.5">
-              {[5, 15, 30, 0].map((mins) => (
-                <button
-                  key={mins}
-                  type="button"
-                  onClick={() => setTimeoutMinutes(mins as TimeoutOption)}
-                  className={cn(
-                    "py-1.5 px-2 rounded-lg border text-[11px] font-bold transition-all cursor-pointer",
-                    timeoutMinutes === mins
-                      ? "bg-primary text-primary-foreground border-primary shadow-sm"
-                      : "border-border bg-muted/30 text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {mins === 0 ? "Never" : `${mins}m`}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* 4. JSON Backup & Restore directly in Settings Modal */}
-          <div className="pt-2 border-t border-border space-y-2">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
-              Workspace Data Backup
-            </span>
-            <div className="flex gap-2">
-              <Button size="sm" variant="outline" onClick={exportBackup} className="flex-1 text-xs h-8 font-bold">
-                <Download className="w-3.5 h-3.5 mr-1" /> Export JSON
-              </Button>
-              <Button asChild size="sm" variant="secondary" className="flex-1 text-xs h-8 font-bold cursor-pointer">
-                <label>
-                  <Upload className="w-3.5 h-3.5 mr-1" /> Import JSON
-                  <input type="file" accept=".json" onChange={importBackup} className="hidden" />
-                </label>
-              </Button>
-            </div>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
   );
 }
 </file>
@@ -2316,114 +2025,6 @@ export function useNotes() {
 }
 </file>
 
-<file path="src/pages/Reports/EditReportModal.tsx">
-import { useState, useEffect, type FormEvent } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import type { StoredReport } from "./types";
-
-interface Props {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  report: StoredReport | null;
-  onSave: (updated: StoredReport) => void;
-}
-
-export function EditReportModal({ open, onOpenChange, report, onSave }: Props) {
-  const [form, setForm] = useState<StoredReport | null>(report);
-
-  useEffect(() => {
-    setForm(report);
-  }, [report, open]);
-
-  if (!form) return null;
-
-  const handleSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    onSave(form);
-    onOpenChange(false);
-  };
-
-  const update = (field: keyof StoredReport, val: any) => {
-    setForm((prev) => prev ? { ...prev, [field]: Number(val) || 0 } : null);
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg p-5">
-        <DialogHeader>
-          <DialogTitle className="text-sm font-bold">
-            Edit Entry: {form.date} ({form.dayName})
-          </DialogTitle>
-        </DialogHeader>
-
-        <form onSubmit={handleSubmit} className="space-y-3 pt-2 text-xs">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <div>
-              <label className="text-[10px] font-bold text-muted-foreground uppercase">New Adm (Count / ₹)</label>
-              <div className="flex gap-1 mt-0.5">
-                <Input type="number" value={form.newCount} onChange={(e) => update("newCount", e.target.value)} className="h-8 text-xs" />
-                <Input type="number" value={form.newAmount} onChange={(e) => update("newAmount", e.target.value)} className="h-8 text-xs" />
-              </div>
-            </div>
-            <div>
-              <label className="text-[10px] font-bold text-muted-foreground uppercase">Renewal (Count / ₹)</label>
-              <div className="flex gap-1 mt-0.5">
-                <Input type="number" value={form.renewCount} onChange={(e) => update("renewCount", e.target.value)} className="h-8 text-xs" />
-                <Input type="number" value={form.renewAmount} onChange={(e) => update("renewAmount", e.target.value)} className="h-8 text-xs" />
-              </div>
-            </div>
-            <div>
-              <label className="text-[10px] font-bold text-muted-foreground uppercase">Balance (Count / ₹)</label>
-              <div className="flex gap-1 mt-0.5">
-                <Input type="number" value={form.balanceCount} onChange={(e) => update("balanceCount", e.target.value)} className="h-8 text-xs" />
-                <Input type="number" value={form.balanceAmount} onChange={(e) => update("balanceAmount", e.target.value)} className="h-8 text-xs" />
-              </div>
-            </div>
-            <div>
-              <label className="text-[10px] font-bold text-violet-500 uppercase">PT (Count / ₹)</label>
-              <div className="flex gap-1 mt-0.5">
-                <Input type="number" value={form.ptCount} onChange={(e) => update("ptCount", e.target.value)} className="h-8 text-xs border-violet-500/50" />
-                <Input type="number" value={form.ptAmount} onChange={(e) => update("ptAmount", e.target.value)} className="h-8 text-xs border-violet-500/50" />
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 border-t border-border">
-            <div>
-              <label className="text-[10px] font-bold text-muted-foreground uppercase">Cash (₹)</label>
-              <Input type="number" value={form.cashTotal} onChange={(e) => update("cashTotal", e.target.value)} className="h-8 text-xs mt-0.5" />
-            </div>
-            <div>
-              <label className="text-[10px] font-bold text-muted-foreground uppercase">Card / Online (₹)</label>
-              <Input type="number" value={form.cardTotal} onChange={(e) => update("cardTotal", e.target.value)} className="h-8 text-xs mt-0.5" />
-            </div>
-            <div>
-              <label className="text-[10px] font-bold text-emerald-500 uppercase">Collection (₹)</label>
-              <Input type="number" value={form.todayCollection} onChange={(e) => update("todayCollection", e.target.value)} className="h-8 text-xs mt-0.5 font-bold" />
-            </div>
-            <div>
-              <label className="text-[10px] font-bold text-muted-foreground uppercase">Attendance</label>
-              <Input type="number" value={form.attendance} onChange={(e) => update("attendance", e.target.value)} className="h-8 text-xs mt-0.5" />
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-2 pt-3 border-t border-border">
-            <Button type="button" variant="secondary" size="sm" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" size="sm" className="font-bold">
-              Save Changes
-            </Button>
-          </div>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-</file>
-
 <file path="src/pages/Reports/types.ts">
 export interface StoredReport {
   id: string;
@@ -3849,89 +3450,6 @@ export function formatAppError(prefix: string, err: unknown): string {
 }
 </file>
 
-<file path="src/stores/SecurityStore.ts">
-import { create } from "zustand";
-
-export type AuthMethod = "google" | "pin";
-export type TimeoutOption = 5 | 15 | 30 | 60 | 0; // 0 = Never, numbers are minutes
-
-interface SecurityState {
-  authMethod: AuthMethod;
-  pinCode: string | null;
-  timeoutMinutes: TimeoutOption;
-  isLocked: boolean;
-  lastActiveTimestamp: number;
-  settingsModalOpen: boolean;
-  setAuthMethod: (method: AuthMethod) => void;
-  setPinCode: (pin: string | null) => void;
-  setTimeoutMinutes: (minutes: TimeoutOption) => void;
-  setIsLocked: (locked: boolean) => void;
-  recordActivity: () => void;
-  openSettingsModal: () => void;
-  closeSettingsModal: () => void;
-}
-
-const STORAGE_KEY = "launchpad_security_config";
-
-function getInitialConfig() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      return JSON.parse(raw);
-    }
-  } catch {
-    // Ignore storage parse errors
-  }
-  return {
-    authMethod: "google" as AuthMethod,
-    pinCode: null as string | null,
-    timeoutMinutes: 15 as TimeoutOption,
-  };
-}
-
-export const useSecurityStore = create<SecurityState>((set, get) => {
-  const initial = getInitialConfig();
-
-  return {
-    authMethod: initial.authMethod,
-    pinCode: initial.pinCode,
-    timeoutMinutes: initial.timeoutMinutes,
-    isLocked: false,
-    lastActiveTimestamp: Date.now(),
-    settingsModalOpen: false,
-
-    setAuthMethod: (method) => {
-      set({ authMethod: method });
-      const { pinCode, timeoutMinutes } = get();
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ authMethod: method, pinCode, timeoutMinutes }));
-    },
-
-    setPinCode: (pin) => {
-      set({ pinCode: pin });
-      const { authMethod, timeoutMinutes } = get();
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ authMethod, pinCode: pin, timeoutMinutes }));
-    },
-
-    setTimeoutMinutes: (minutes) => {
-      set({ timeoutMinutes: minutes });
-      const { authMethod, pinCode } = get();
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ authMethod, pinCode, timeoutMinutes: minutes }));
-    },
-
-    setIsLocked: (isLocked) => set({ isLocked, lastActiveTimestamp: Date.now() }),
-
-    recordActivity: () => {
-      if (!get().isLocked) {
-        set({ lastActiveTimestamp: Date.now() });
-      }
-    },
-
-    openSettingsModal: () => set({ settingsModalOpen: true }),
-    closeSettingsModal: () => set({ settingsModalOpen: false }),
-  };
-});
-</file>
-
 <file path="src/stores/uiStore.ts">
 import { create } from "zustand";
 
@@ -4177,6 +3695,10 @@ lerna-debug.log*
 dev-dist/
 
 dev-dist/
+</file>
+
+<file path=".npmrc">
+legacy-peer-deps=true
 </file>
 
 <file path="components.json">
@@ -4474,6 +3996,14 @@ directory = "./dist"
 not_found_handling = "single-page-application"
 </file>
 
+<file path="src/components/auth/AuthGuard.tsx">
+import { type ReactNode } from "react";
+
+export function AuthGuard({ children }: { children: ReactNode }) {
+  return <>{children}</>;
+}
+</file>
+
 <file path="src/components/shared/ErrorBoundary.tsx">
 import {
   Component,
@@ -4636,6 +4166,117 @@ export function DashboardPage() {
       {activeTab === "reports" && <ReportsPage />}
       {activeTab === "launchpad" && <LaunchpadPage searchTerm={search} />}
     </main>
+  );
+}
+</file>
+
+<file path="src/pages/Reports/EditReportModal.tsx">
+import { useState, useEffect, type FormEvent } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import type { StoredReport } from "./types";
+
+interface Props {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  report: StoredReport | null;
+  onSave: (updated: StoredReport) => void;
+}
+
+export function EditReportModal({ open, onOpenChange, report, onSave }: Props) {
+  const [form, setForm] = useState<StoredReport | null>(report);
+
+  useEffect(() => {
+    setForm(report);
+  }, [report, open]);
+
+  if (!form) return null;
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    onSave(form);
+    onOpenChange(false);
+  };
+
+  const update = (field: keyof StoredReport, val: any) => {
+    setForm((prev) => {
+      if (!prev) return null;
+      return { ...prev, [field]: Number(val) || 0 } as unknown as StoredReport;
+    });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg p-5">
+        <DialogHeader>
+          <DialogTitle className="text-sm font-bold">
+            Edit Entry: {form.date} ({form.dayName})
+          </DialogTitle>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit} className="space-y-3 pt-2 text-xs">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div>
+              <label className="text-[10px] font-bold text-muted-foreground uppercase">New Adm (Count / ₹)</label>
+              <div className="flex gap-1 mt-0.5">
+                <Input type="number" value={form.newCount} onChange={(e) => update("newCount", e.target.value)} className="h-8 text-xs" />
+                <Input type="number" value={form.newAmount} onChange={(e) => update("newAmount", e.target.value)} className="h-8 text-xs" />
+              </div>
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-muted-foreground uppercase">Renewal (Count / ₹)</label>
+              <div className="flex gap-1 mt-0.5">
+                <Input type="number" value={form.renewCount} onChange={(e) => update("renewCount", e.target.value)} className="h-8 text-xs" />
+                <Input type="number" value={form.renewAmount} onChange={(e) => update("renewAmount", e.target.value)} className="h-8 text-xs" />
+              </div>
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-muted-foreground uppercase">Balance (Count / ₹)</label>
+              <div className="flex gap-1 mt-0.5">
+                <Input type="number" value={form.balanceCount} onChange={(e) => update("balanceCount", e.target.value)} className="h-8 text-xs" />
+                <Input type="number" value={form.balanceAmount} onChange={(e) => update("balanceAmount", e.target.value)} className="h-8 text-xs" />
+              </div>
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-violet-500 uppercase">PT (Count / ₹)</label>
+              <div className="flex gap-1 mt-0.5">
+                <Input type="number" value={form.ptCount} onChange={(e) => update("ptCount", e.target.value)} className="h-8 text-xs border-violet-500/50" />
+                <Input type="number" value={form.ptAmount} onChange={(e) => update("ptAmount", e.target.value)} className="h-8 text-xs border-violet-500/50" />
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 border-t border-border">
+            <div>
+              <label className="text-[10px] font-bold text-muted-foreground uppercase">Cash (₹)</label>
+              <Input type="number" value={form.cashTotal} onChange={(e) => update("cashTotal", e.target.value)} className="h-8 text-xs mt-0.5" />
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-muted-foreground uppercase">Card / Online (₹)</label>
+              <Input type="number" value={form.cardTotal} onChange={(e) => update("cardTotal", e.target.value)} className="h-8 text-xs mt-0.5" />
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-emerald-500 uppercase">Collection (₹)</label>
+              <Input type="number" value={form.todayCollection} onChange={(e) => update("todayCollection", e.target.value)} className="h-8 text-xs mt-0.5 font-bold" />
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-muted-foreground uppercase">Attendance</label>
+              <Input type="number" value={form.attendance} onChange={(e) => update("attendance", e.target.value)} className="h-8 text-xs mt-0.5" />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-3 border-t border-border">
+            <Button type="button" variant="secondary" size="sm" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" size="sm" className="font-bold">
+              Save Changes
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 </file>
@@ -5091,31 +4732,6 @@ export function useWorkspaceSync() {
 }
 </file>
 
-<file path="src/main.tsx">
-import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
-import { RouterProvider } from "react-router-dom";
-import { registerSW } from "virtual:pwa-register";
-import { ThemeProvider } from "@/components/auth/ThemeToggle";
-import { LoginOverlay } from "@/components/auth/LoginOverlay";
-import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
-import { router } from "@/router";
-import "./index.css";
-
-registerSW({ immediate: true });
-
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <ErrorBoundary>
-      <ThemeProvider>
-        <LoginOverlay />
-        <RouterProvider router={router} />
-      </ThemeProvider>
-    </ErrorBoundary>
-  </StrictMode>,
-);
-</file>
-
 <file path="vite.config.ts">
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
@@ -5372,72 +4988,6 @@ export async function persistWorkspace(
 }
 </file>
 
-<file path="src/stores/workspaceStore.ts">
-import { create } from "zustand";
-import type { User } from "firebase/auth";
-import type { AppError } from "@/shared/api/errors";
-import {
-  cloneDefaultWorkspace,
-  type Workspace,
-  type TodoItem,
-} from "@/types/workspace";
-import type { NoteItem } from "@/pages/Notes/notes.types";
-import type { StoredReport } from "@/pages/Reports/types";
-
-export interface SyncState {
-  status: "idle" | "active" | "offline" | "error";
-  message: string;
-  error?: AppError;
-}
-
-interface WorkspaceStoreState {
-  user: User | null;
-  workspace: Workspace;
-  sync: SyncState;
-  setUser: (user: User | null) => void;
-  setWorkspace: (workspace: Workspace) => void;
-  setSync: (sync: SyncState) => void;
-  setTodos: (updater: (todos: TodoItem[]) => TodoItem[]) => void;
-  setNotes: (updater: (notes: NoteItem[]) => NoteItem[]) => void;
-  setReports: (updater: (reports: StoredReport[]) => StoredReport[]) => void;
-}
-
-export const useWorkspaceStore = create<WorkspaceStoreState>((set) => ({
-  user: null,
-  workspace: cloneDefaultWorkspace(),
-  sync: {
-    status: "idle",
-    message: "Initializing...",
-  },
-  setUser: (user) => set({ user }),
-  setWorkspace: (workspace) => set({ workspace }),
-  setSync: (sync) => set({ sync }),
-  setTodos: (updater) =>
-    set((state) => ({
-      workspace: {
-        ...state.workspace,
-        todos: updater(state.workspace.todos || []),
-      },
-    })),
-  setNotes: (updater) =>
-    set((state) => ({
-      workspace: {
-        ...state.workspace,
-        notes: updater(state.workspace.notes || []),
-      },
-    })),
-  setReports: (updater) =>
-    set((state) => ({
-      workspace: {
-        ...state.workspace,
-        reports: updater(state.workspace.reports || []),
-      },
-    })),
-}));
-
-export const selectWorkspace = (state: WorkspaceStoreState) => state.workspace;
-</file>
-
 <file path="src/types/workspace.ts">
 import type { NoteItem } from "@/pages/Notes/notes.types";
 import type { StoredReport } from "@/pages/Reports/types";
@@ -5630,199 +5180,6 @@ export const router = createBrowserRouter([
     ],
   },
 ]);
-</file>
-
-<file path="src/components/layout/AppHeader.tsx">
-import { 
-  Compass, 
-  Download, 
-  LogOut, 
-  MoreVertical, 
-  Settings, 
-  Upload, 
-  Plus, 
-  Link as LinkIcon, 
-  FolderPlus, 
-  FileText, 
-  BarChart3
-} from "lucide-react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { ThemeToggle } from "@/components/auth/ThemeToggle";
-import { useAuth } from "@/components/auth/useAuth";
-import { useWorkspaceStore } from "@/stores/workspaceStore";
-import { useUIStore, type ActiveTab } from "@/stores/uiStore";
-import { useBackup } from "@/pages/Settings/useBackup";
-import { SyncIndicator } from "./SyncIndicator";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-
-export function AppHeader() {
-  const user = useWorkspaceStore((s) => s.user);
-  const title = useWorkspaceStore((s) => s.workspace.settings.title);
-  const { logout } = useAuth();
-  const { exportBackup, importBackup } = useBackup();
-  const location = useLocation();
-  const navigate = useNavigate();
-
-  const setActiveTab = useUIStore((s) => s.setActiveTab);
-  const openAddLink = useUIStore((s) => s.openAddLink);
-  const openAddFolder = useUIStore((s) => s.openAddFolder);
-  const openReportPasteModal = useUIStore((s) => s.openReportPasteModal);
-
-  const avatarUrl =
-    user?.photoURL ??
-    `https://ui-avatars.com/api/?name=${encodeURIComponent(
-      user?.email ?? "User",
-    )}&background=2563eb&color=fff`;
-
-  const handleNav = (tab: ActiveTab) => {
-    setActiveTab(tab);
-    if (location.pathname !== "/dashboard") {
-      navigate("/dashboard");
-    }
-  };
-
-  return (
-    <header className="sticky top-0 z-40 bg-card/90 backdrop-blur-md border-b border-border">
-      <div className="max-w-6xl mx-auto px-3 sm:px-4 h-14 flex items-center justify-between gap-2 sm:gap-3">
-        {/* Left Brand */}
-        <div className="flex items-center gap-3 min-w-0">
-          <div 
-            onClick={() => handleNav("tasks")} 
-            className="flex items-center gap-2 min-w-0 cursor-pointer select-none"
-          >
-            <div className="w-8 h-8 rounded-xl bg-primary text-primary-foreground flex items-center justify-center flex-shrink-0 shadow-sm">
-              <Compass className="h-4 w-4" strokeWidth={2.5} />
-            </div>
-            <div className="min-w-0">
-              <h1 className="text-xs font-bold tracking-tight truncate leading-tight">
-                {title}
-              </h1>
-              <SyncIndicator />
-            </div>
-          </div>
-        </div>
-
-        {/* Right Action Tools: + Quick Action Dropdown, Theme, Settings Menu */}
-        <div className="flex items-center gap-1.5 sm:gap-2">
-          {/* Universal Create Dropdown */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                size="sm"
-                className="rounded-xl font-bold gap-1.5 shadow-sm bg-primary text-primary-foreground text-xs cursor-pointer h-8 px-3"
-              >
-                <Plus className="h-4 w-4 stroke-[3]" />
-                <span className="hidden sm:inline">Add / Ingest</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-52 rounded-2xl p-1.5 text-xs">
-              <DropdownMenuLabel className="text-[10px] uppercase font-bold text-muted-foreground px-2 py-1">
-                Quick Actions
-              </DropdownMenuLabel>
-              <DropdownMenuItem 
-                onSelect={() => handleNav("tasks")} 
-                className="cursor-pointer font-semibold py-2"
-              >
-                <FileText className="h-3.5 w-3.5 text-amber-500 mr-2" />
-                Add Task / Note
-              </DropdownMenuItem>
-              <DropdownMenuItem 
-                onSelect={openReportPasteModal} 
-                className="cursor-pointer font-semibold py-2"
-              >
-                <BarChart3 className="h-3.5 w-3.5 text-emerald-500 mr-2" />
-                Paste Gym Report
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem 
-                onSelect={() => { handleNav("launchpad"); openAddLink(); }} 
-                className="cursor-pointer font-semibold py-2"
-              >
-                <LinkIcon className="h-3.5 w-3.5 text-blue-500 mr-2" />
-                Add Bookmark Link
-              </DropdownMenuItem>
-              <DropdownMenuItem 
-                onSelect={() => { handleNav("launchpad"); openAddFolder(); }} 
-                className="cursor-pointer font-semibold py-2"
-              >
-                <FolderPlus className="h-3.5 w-3.5 text-violet-500 mr-2" />
-                New Resource Folder
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          <ThemeToggle />
-
-          {/* User & Settings Dropdown */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="rounded-xl cursor-pointer h-8 w-8" aria-label="Open menu">
-                {user ? (
-                  <img
-                    src={avatarUrl}
-                    className="w-6 h-6 rounded-full object-cover"
-                    alt="Profile"
-                  />
-                ) : (
-                  <MoreVertical className="h-4 w-4" />
-                )}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56 rounded-2xl">
-              {user && (
-                <DropdownMenuLabel>
-                  <div className="flex flex-col gap-0.5">
-                    <span className="truncate text-xs font-semibold">
-                      {user.displayName ?? "Workspace User"}
-                    </span>
-                    <span className="text-[11px] font-normal text-muted-foreground truncate">
-                      {user.email}
-                    </span>
-                  </div>
-                </DropdownMenuLabel>
-              )}
-              <DropdownMenuItem asChild>
-                <Link to="/settings" className="cursor-pointer">
-                  <Settings className="h-3.5 w-3.5 text-muted-foreground" />
-                  Settings & Data
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={exportBackup} className="cursor-pointer">
-                <Download className="h-3.5 w-3.5 text-muted-foreground" />
-                Export JSON Backup
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <label className="cursor-pointer">
-                  <Upload className="h-3.5 w-3.5 text-muted-foreground" />
-                  Import JSON Backup
-                  <input
-                    type="file"
-                    accept=".json"
-                    onChange={importBackup}
-                    className="hidden"
-                  />
-                </label>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem danger onSelect={logout} className="cursor-pointer">
-                <LogOut className="h-3.5 w-3.5" />
-                Sign Out
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
-    </header>
-  );
-}
 </file>
 
 <file path="src/pages/Reports/index.tsx">
@@ -6347,6 +5704,100 @@ export function ReportsPage() {
 }
 </file>
 
+<file path="src/main.tsx">
+import React from "react";
+import ReactDOM from "react-dom/client";
+import { RouterProvider } from "react-router-dom";
+import { router } from "./router";
+import "./index.css";
+
+ReactDOM.createRoot(document.getElementById("root")!).render(
+  <React.StrictMode>
+    <RouterProvider router={router} />
+  </React.StrictMode>
+);
+</file>
+
+<file path="src/stores/workspaceStore.ts">
+import { create } from "zustand";
+import type { User } from "firebase/auth";
+import type { AppError } from "@/shared/api/errors";
+import {
+  cloneDefaultWorkspace,
+  type Workspace,
+  type TodoItem,
+} from "@/types/workspace";
+import type { NoteItem } from "@/pages/Notes/notes.types";
+import type { StoredReport } from "@/pages/Reports/types";
+
+export interface SyncState {
+  status: "idle" | "active" | "offline" | "error";
+  message: string;
+  error?: AppError;
+}
+
+export interface WorkspaceStoreState {
+  user: User | null;
+  workspace: Workspace;
+  sync: SyncState;
+  setUser: (user: User | null) => void;
+  // Make setWorkspace support both direct objects AND functional updaters
+  setWorkspace: (updaterOrWorkspace: Workspace | ((prev: Workspace) => Workspace)) => void;
+  setSync: (sync: SyncState) => void;
+  setTodos: (updater: (todos: TodoItem[]) => TodoItem[]) => void;
+  setNotes: (updater: (notes: NoteItem[]) => NoteItem[]) => void;
+  setReports: (updater: (reports: StoredReport[]) => StoredReport[]) => void;
+}
+
+export const useWorkspaceStore = create<WorkspaceStoreState>((set) => ({
+  user: null,
+  workspace: cloneDefaultWorkspace(),
+  sync: {
+    status: "idle",
+    message: "Initializing...",
+  },
+  setUser: (user) => set({ user }),
+  
+  // Safely handle (prev) => ... logic
+  setWorkspace: (updaterOrWorkspace) =>
+    set((state) => ({
+      workspace:
+        typeof updaterOrWorkspace === "function"
+          ? updaterOrWorkspace(state.workspace)
+          : updaterOrWorkspace,
+    })),
+    
+  setSync: (sync) => set({ sync }),
+  
+  setTodos: (updater) =>
+    set((state) => ({
+      workspace: {
+        ...state.workspace,
+        todos: updater(state.workspace.todos || []),
+      },
+    })),
+    
+  setNotes: (updater) =>
+    set((state) => ({
+      workspace: {
+        ...state.workspace,
+        notes: updater(state.workspace.notes || []),
+      },
+    })),
+    
+  setReports: (updater) =>
+    set((state) => ({
+      workspace: {
+        ...state.workspace,
+        reports: updater(state.workspace.reports || []),
+      },
+    })),
+}));
+
+export const selectWorkspace = (state: WorkspaceStoreState) => state.workspace;
+export const selectTodos = (state: WorkspaceStoreState) => state.workspace.todos;
+</file>
+
 <file path="src/App.tsx">
 import { useEffect } from "react";
 import { Outlet } from "react-router-dom";
@@ -6399,22 +5850,27 @@ export function App() {
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "vite build",
     "preview": "vite preview"
   },
   "dependencies": {
     "@cloudflare/vite-plugin": "^0.1.21",
     "@hookform/resolvers": "^3.9.0",
+    "@radix-ui/react-checkbox": "^1.1.2",
     "@radix-ui/react-dialog": "^1.1.2",
     "@radix-ui/react-dropdown-menu": "^2.1.2",
+    "@radix-ui/react-label": "^2.1.0",
     "@radix-ui/react-slot": "^1.1.0",
+    "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "firebase": "^10.13.1",
     "lucide-react": "^0.446.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.53.0",
+    "react-router-dom": "^6.26.2",
     "tailwind-merge": "^2.5.3",
+    "tailwindcss-animate": "^1.0.7",
     "zod": "^3.23.8",
     "zustand": "^5.0.0"
   },
@@ -6429,6 +5885,188 @@ export function App() {
     "vite": "^6.1.0",
     "vite-plugin-pwa": "^0.21.0"
   }
+}
+</file>
+
+<file path="src/components/layout/AppHeader.tsx">
+import { 
+  Compass, 
+  Download, 
+  LogOut, 
+  MoreVertical, 
+  Upload, 
+  Plus, 
+  Link as LinkIcon, 
+  FolderPlus, 
+  FileText, 
+  BarChart3
+} from "lucide-react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/auth/ThemeToggle";
+import { useAuth } from "@/components/auth/useAuth";
+import { useWorkspaceStore } from "@/stores/workspaceStore";
+import { useUIStore, type ActiveTab } from "@/stores/uiStore";
+import { useBackup } from "@/pages/Settings/useBackup";
+import { SyncIndicator } from "./SyncIndicator";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+
+export function AppHeader() {
+  const user = useWorkspaceStore((s) => s.user);
+  const title = useWorkspaceStore((s) => s.workspace.settings.title);
+  const { logout } = useAuth();
+  const { exportBackup, importBackup } = useBackup();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const setActiveTab = useUIStore((s) => s.setActiveTab);
+  const openAddLink = useUIStore((s) => s.openAddLink);
+  const openAddFolder = useUIStore((s) => s.openAddFolder);
+  const openReportPasteModal = useUIStore((s) => s.openReportPasteModal);
+
+  const avatarUrl =
+    user?.photoURL ??
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(
+      user?.email ?? "User",
+    )}&background=2563eb&color=fff`;
+
+  const handleNav = (tab: ActiveTab) => {
+    setActiveTab(tab);
+    if (location.pathname !== "/dashboard") {
+      navigate("/dashboard");
+    }
+  };
+
+  return (
+    <header className="sticky top-0 z-40 bg-card/90 backdrop-blur-md border-b border-border">
+      <div className="max-w-6xl mx-auto px-3 sm:px-4 h-14 flex items-center justify-between gap-2 sm:gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <div 
+            onClick={() => handleNav("tasks")} 
+            className="flex items-center gap-2 min-w-0 cursor-pointer select-none"
+          >
+            <div className="w-8 h-8 rounded-xl bg-primary text-primary-foreground flex items-center justify-center flex-shrink-0 shadow-sm">
+              <Compass className="h-4 w-4" strokeWidth={2.5} />
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-xs font-bold tracking-tight truncate leading-tight">
+                {title}
+              </h1>
+              <SyncIndicator />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                size="sm"
+                className="rounded-xl font-bold gap-1.5 shadow-sm bg-primary text-primary-foreground text-xs cursor-pointer h-8 px-3"
+              >
+                <Plus className="h-4 w-4 stroke-[3]" />
+                <span className="hidden sm:inline">Add / Ingest</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52 rounded-2xl p-1.5 text-xs">
+              <DropdownMenuLabel className="text-[10px] uppercase font-bold text-muted-foreground px-2 py-1">
+                Quick Actions
+              </DropdownMenuLabel>
+              <DropdownMenuItem 
+                onSelect={() => handleNav("tasks")} 
+                className="cursor-pointer font-semibold py-2"
+              >
+                <FileText className="h-3.5 w-3.5 text-amber-500 mr-2" />
+                Add Task / Note
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                onSelect={openReportPasteModal} 
+                className="cursor-pointer font-semibold py-2"
+              >
+                <BarChart3 className="h-3.5 w-3.5 text-emerald-500 mr-2" />
+                Paste Gym Report
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem 
+                onSelect={() => { handleNav("launchpad"); openAddLink(); }} 
+                className="cursor-pointer font-semibold py-2"
+              >
+                <LinkIcon className="h-3.5 w-3.5 text-blue-500 mr-2" />
+                Add Bookmark Link
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                onSelect={() => { handleNav("launchpad"); openAddFolder(); }} 
+                className="cursor-pointer font-semibold py-2"
+              >
+                <FolderPlus className="h-3.5 w-3.5 text-violet-500 mr-2" />
+                New Resource Folder
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <ThemeToggle />
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="rounded-xl cursor-pointer h-8 w-8" aria-label="Open menu">
+                {user ? (
+                  <img
+                    src={avatarUrl}
+                    className="w-6 h-6 rounded-full object-cover"
+                    alt="Profile"
+                  />
+                ) : (
+                  <MoreVertical className="h-4 w-4" />
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56 rounded-2xl">
+              {user && (
+                <DropdownMenuLabel>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="truncate text-xs font-semibold">
+                      {user.displayName ?? "Workspace User"}
+                    </span>
+                    <span className="text-[11px] font-normal text-muted-foreground truncate">
+                      {user.email}
+                    </span>
+                  </div>
+                </DropdownMenuLabel>
+              )}
+              <DropdownMenuItem onSelect={exportBackup} className="cursor-pointer">
+                <Download className="h-3.5 w-3.5 text-muted-foreground" />
+                Export JSON Backup
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <label className="cursor-pointer">
+                  <Upload className="h-3.5 w-3.5 text-muted-foreground" />
+                  Import JSON Backup
+                  <input
+                    type="file"
+                    accept=".json"
+                    onChange={importBackup}
+                    className="hidden"
+                  />
+                </label>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem danger onSelect={logout} className="cursor-pointer">
+                <LogOut className="h-3.5 w-3.5" />
+                Sign Out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+    </header>
+  );
 }
 </file>
 

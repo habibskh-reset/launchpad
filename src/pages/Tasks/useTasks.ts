@@ -2,11 +2,8 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { createId } from "@/lib/id";
 import { useWorkspaceStore, selectTodos } from "@/stores/workspaceStore";
 import { addDays, getTodayDate, getWeekEnd, getWeekStart } from "@/lib/date";
-import type { TodoItem, TaskPriority } from "@/types/workspace";
-
-function isNotificationSupported(): boolean {
-  return typeof window !== "undefined" && "Notification" in window;
-}
+import { dispatchTaskNotification, isNotificationSupported } from "@/services/notifications";
+import type { TodoItem, TaskPriority, ReminderStatus } from "@/types/workspace";
 
 export async function ensureReminderPermission(): Promise<
   NotificationPermission | "unsupported"
@@ -34,6 +31,8 @@ export type TodoCreateInput = {
   dueDate?: string;
   dueTime?: string;
   reminder?: boolean;
+  reminderOffset?: number;
+  audioAlert?: boolean;
   priority?: TaskPriority;
 };
 
@@ -44,6 +43,9 @@ export type TodoPatch = Partial<
     | "dueDate"
     | "dueTime"
     | "reminder"
+    | "reminderOffset"
+    | "reminderStatus"
+    | "audioAlert"
     | "priority"
     | "done"
   >
@@ -73,54 +75,34 @@ export function useTasks() {
   }, []);
 
   const fireNotification = useCallback(async (task: TodoItem) => {
-    if (!isNotificationSupported() || Notification.permission !== "granted") {
-      return;
-    }
-
     if (triggeredIdsRef.current.has(task.id)) {
       return;
     }
     triggeredIdsRef.current.add(task.id);
 
-    const title = task.text;
-    const options: NotificationOptions = {
-      body: `Reminder due at ${task.dueTime || "09:00"}`,
-      icon: "/favicon.svg",
-      badge: "/favicon.svg",
-      tag: `todo-reminder-${task.id}`,
-    };
+    await dispatchTaskNotification(task);
 
-    if ("serviceWorker" in navigator) {
-      try {
-        const registration = await navigator.serviceWorker.ready;
-        await registration.showNotification(title, options);
-        return;
-      } catch {
-        // Fallback below
-      }
-    }
-
-    try {
-      new Notification(title, options);
-    } catch {
-      // Suppressed
-    }
-  }, []);
+    setWorkspace((prev) => ({
+      ...prev,
+      todos: prev.todos.map((t) =>
+        t.id === task.id ? { ...t, reminderStatus: "triggered" } : t
+      ),
+    }));
+  }, [setWorkspace]);
 
   const scheduleTimer = useCallback(
     (task: TodoItem) => {
       clearTimer(task.id);
 
-      if (!task.reminder || !task.dueDate || task.done) {
+      if (!task.reminder || !task.dueDate || task.done || task.reminderStatus === "dismissed") {
         return;
       }
 
-      if (!isNotificationSupported() || Notification.permission !== "granted") {
-        return;
-      }
-
-      const targetDate = new Date(`${task.dueDate}T${task.dueTime || "09:00"}`);
-      const delay = targetDate.getTime() - Date.now();
+      const timeStr = task.dueTime || "09:00";
+      const targetDate = new Date(`${task.dueDate}T${timeStr}:00`);
+      const offsetMs = (task.reminderOffset || 0) * 60 * 1000;
+      const targetTime = targetDate.getTime() - offsetMs;
+      const delay = targetTime - Date.now();
 
       if (delay <= 0 && delay > -60000) {
         void fireNotification(task);
@@ -152,6 +134,9 @@ export function useTasks() {
         dueDate: input.dueDate ?? getTodayDate(),
         dueTime: input.dueTime,
         reminder: Boolean(input.reminder),
+        reminderOffset: input.reminderOffset ?? 0,
+        reminderStatus: input.reminder ? "pending" : undefined,
+        audioAlert: input.audioAlert ?? true,
         priority: input.priority,
       };
 
@@ -175,15 +160,22 @@ export function useTasks() {
 
       if (!current) return;
 
+      const resetTrigger =
+        Boolean(patch.reminder && !current.reminder) ||
+        Boolean(patch.dueDate && patch.dueDate !== current.dueDate) ||
+        Boolean(patch.dueTime && patch.dueTime !== current.dueTime) ||
+        Boolean(patch.reminderOffset !== undefined && patch.reminderOffset !== current.reminderOffset);
+
+      if (resetTrigger) {
+        triggeredIdsRef.current.delete(id);
+      }
+
       const updated: TodoItem = {
         ...current,
         ...patch,
+        reminderStatus: resetTrigger ? "pending" : patch.reminderStatus ?? current.reminderStatus,
         id,
       };
-
-      if (patch.reminder || patch.dueDate || patch.dueTime) {
-        triggeredIdsRef.current.delete(id);
-      }
 
       setWorkspace((prev) => ({
         ...prev,
@@ -205,9 +197,11 @@ export function useTasks() {
         ...prev,
         todos: prev.todos.map((t) => {
           if (t.id !== id) return t;
+          const nextDone = !t.done;
           const next: TodoItem = {
             ...t,
-            done: !t.done,
+            done: nextDone,
+            reminderStatus: nextDone ? "dismissed" : t.reminder ? "pending" : undefined,
             date: getTodayDate(),
           };
 
@@ -247,6 +241,7 @@ export function useTasks() {
           return {
             ...t,
             dueDate: nextWeekStart,
+            reminderStatus: t.reminder ? ("pending" as ReminderStatus) : undefined,
           };
         }),
       }));
@@ -263,6 +258,7 @@ export function useTasks() {
           return {
             ...t,
             dueDate: getTodayDate(),
+            reminderStatus: t.reminder ? ("pending" as ReminderStatus) : undefined,
           };
         }),
       }));
@@ -270,13 +266,12 @@ export function useTasks() {
     [setWorkspace],
   );
 
-  // Split tasks by current calendar week bounds
+  // Split tasks by calendar week bounds
   const { thisWeek, nextWeek } = useMemo(() => {
     const thisList: TodoItem[] = [];
     const nextList: TodoItem[] = [];
 
     todos.forEach((todo) => {
-      // Anything due on or before Sunday of this week belongs to This Week
       if (!todo.dueDate || todo.dueDate <= weekEnd) {
         thisList.push(todo);
       } else {
@@ -301,12 +296,12 @@ export function useTasks() {
     const rolled = todos.map((todo) => {
       if (todo.done) return todo;
       const due = todo.dueDate ?? todo.date;
-      // Overdue tasks from before this week get brought forward to Today
       if (due && due < weekStart) {
         needsRollover = true;
         return {
           ...todo,
           dueDate: currentToday,
+          reminderStatus: todo.reminder ? ("pending" as ReminderStatus) : undefined,
         };
       }
       return todo;
@@ -328,8 +323,9 @@ export function useTasks() {
 
     const interval = window.setInterval(() => {
       todos.forEach((todo) => {
-        if (todo.reminder && !todo.done && todo.dueDate) {
-          const target = new Date(`${todo.dueDate}T${todo.dueTime || "09:00"}`).getTime();
+        if (todo.reminder && !todo.done && todo.dueDate && todo.reminderStatus !== "dismissed") {
+          const offsetMs = (todo.reminderOffset || 0) * 60 * 1000;
+          const target = new Date(`${todo.dueDate}T${todo.dueTime || "09:00"}`).getTime() - offsetMs;
           const diff = target - Date.now();
           if (diff <= 0 && diff > -120000 && !triggeredIdsRef.current.has(todo.id)) {
             void fireNotification(todo);

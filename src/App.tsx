@@ -2,12 +2,16 @@ import { useEffect } from "react";
 import { Outlet } from "react-router-dom";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { useWorkspaceSync } from "@/services/firebase/useWorkspaceSync";
+import { useReminderEngine } from "@/services/useReminderEngine";
 import { AppShell } from "@/app/AppShell";
 import { QuickCaptureModal } from "@/components/layout/QuickCaptureModal";
+import { PasscodeOverlay } from "@/components/auth/PasscodeOverlay";
 import { useUIStore } from "@/stores/uiStore";
 
 export function App() {
   useWorkspaceSync();
+  useReminderEngine();
+
   const captureOpen = useUIStore((s) => s.captureModalOpen);
   const openCaptureModal = useUIStore((s) => s.openCaptureModal);
   const closeCaptureModal = useUIStore((s) => s.closeCaptureModal);
@@ -36,6 +40,7 @@ export function App() {
         open={captureOpen}
         onOpenChange={handleOpenChange}
       />
+      <PasscodeOverlay />
     </AppShell>
   );
 }

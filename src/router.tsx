@@ -1,11 +1,9 @@
 import { lazy, Suspense } from "react";
-import {
-  createBrowserRouter,
-  Navigate,
-} from "react-router-dom";
+import { createBrowserRouter, Navigate } from "react-router-dom";
 import { App } from "@/App";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 import { RouteErrorPage } from "@/pages/RouteErrorPage";
+import { AuthProvider } from "@/components/auth/AuthProvider";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 
 const DashboardPage = lazy(() =>
@@ -14,21 +12,27 @@ const DashboardPage = lazy(() =>
   })),
 );
 
+const SettingsPage = lazy(() =>
+  import("@/pages/Settings").then((module) => ({
+    default: module.SettingsPage,
+  })),
+);
+
 function PageFallback() {
   return (
     <main className="flex-1 max-w-5xl mx-auto w-full p-6 flex items-center justify-center">
-      <div className="text-sm text-muted-foreground">
-        Loading…
-      </div>
+      <div className="text-sm text-muted-foreground">Loading…</div>
     </main>
   );
 }
 
 function ProtectedShell() {
   return (
-    <AuthGuard>
-      <App />
-    </AuthGuard>
+    <AuthProvider>
+      <AuthGuard>
+        <App />
+      </AuthGuard>
+    </AuthProvider>
   );
 }
 
@@ -51,7 +55,11 @@ export const router = createBrowserRouter([
       },
       {
         path: "/settings",
-        element: <Navigate to="/dashboard" replace />,
+        element: (
+          <Suspense fallback={<PageFallback />}>
+            <SettingsPage />
+          </Suspense>
+        ),
       },
       {
         path: "*",

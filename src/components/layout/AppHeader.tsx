@@ -8,13 +8,16 @@ import {
   Link as LinkIcon, 
   FolderPlus, 
   FileText, 
-  BarChart3
+  BarChart3,
+  Settings as SettingsIcon,
+  Lock
 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/auth/ThemeToggle";
 import { useAuth } from "@/components/auth/useAuth";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
+import { useSecurityStore } from "@/stores/securityStore";
 import { useUIStore, type ActiveTab } from "@/stores/uiStore";
 import { useBackup } from "@/pages/Settings/useBackup";
 import { SyncIndicator } from "./SyncIndicator";
@@ -30,6 +33,9 @@ import {
 export function AppHeader() {
   const user = useWorkspaceStore((s) => s.user);
   const title = useWorkspaceStore((s) => s.workspace.settings.title);
+  const passcode = useSecurityStore((s) => s.passcode);
+  const lock = useSecurityStore((s) => s.lock);
+
   const { logout } = useAuth();
   const { exportBackup, importBackup } = useBackup();
   const location = useLocation();
@@ -149,6 +155,21 @@ export function AppHeader() {
                   </div>
                 </DropdownMenuLabel>
               )}
+
+              {passcode && (
+                <DropdownMenuItem onSelect={lock} className="cursor-pointer font-semibold text-primary">
+                  <Lock className="h-3.5 w-3.5 mr-1" />
+                  Lock Workspace
+                </DropdownMenuItem>
+              )}
+
+              <DropdownMenuItem onSelect={() => navigate("/settings")} className="cursor-pointer">
+                <SettingsIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                Settings & Security
+              </DropdownMenuItem>
+
+              <DropdownMenuSeparator />
+
               <DropdownMenuItem onSelect={exportBackup} className="cursor-pointer">
                 <Download className="h-3.5 w-3.5 text-muted-foreground" />
                 Export JSON Backup
