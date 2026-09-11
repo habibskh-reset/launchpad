@@ -1,17 +1,23 @@
-import { useState, type ChangeEvent } from "react";
+import { useState, useRef, type ChangeEvent } from "react";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 import { CURRENT_BACKUP_VERSION, type BackupEnvelope, migrateBackupPayload } from "@/services/backup/schema";
+import { persistWorkspace } from "@/services/firebase/workspace";
+
+const LOCAL_STORAGE_PREFIX = "launchpad_workspace";
 
 export function useBackup() {
   const workspace = useWorkspaceStore((state) => state.workspace);
-  const setWorkspace = useWorkspaceStore((state) => state.setWorkspace);
+  const restoreWorkspace = useWorkspaceStore((state) => state.restoreWorkspace);
+  const user = useWorkspaceStore((state) => state.user);
+
   const [isProcessing, setIsProcessing] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const exportBackup = () => {
     try {
       setIsProcessing(true);
-      setStatusMessage("Packaging workspace data...");
+      setStatusMessage("Packaging workspace...");
 
       const payload: BackupEnvelope = {
         app: "reset-launchpad",
@@ -41,87 +47,98 @@ export function useBackup() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      setStatusMessage("Backup downloaded successfully.");
+      setStatusMessage("Downloaded successfully.");
       setTimeout(() => setStatusMessage(null), 3000);
     } catch (err) {
       console.error("Backup export failure:", err);
-      alert("Failed to export workspace backup.");
+      alert("Failed to export backup.");
       setStatusMessage(null);
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const importBackup = (event: ChangeEvent<HTMLInputElement>) => {
+  const triggerImportClick = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+      fileInputRef.current.click();
+    }
+  };
+
+  const importBackup = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     setIsProcessing(true);
-    setStatusMessage("Reading backup file...");
+    setStatusMessage("Reading file...");
 
     const reader = new FileReader();
 
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
         const rawContent = e.target?.result as string;
-        if (!rawContent) {
-          throw new Error("File appears to be empty.");
+        if (!rawContent || !rawContent.trim()) {
+          throw new Error("The selected file is empty.");
         }
 
         const parsed = JSON.parse(rawContent);
-        const migratedWorkspace = migrateBackupPayload(parsed);
+        const normalized = migrateBackupPayload(parsed);
 
-        const repCount = migratedWorkspace.reports?.length ?? 0;
-        const taskCount = migratedWorkspace.todos.length;
-        const noteCount = migratedWorkspace.notes?.length ?? 0;
-        const linkCount = migratedWorkspace.links.length;
-        const folderCount = migratedWorkspace.columns.length;
+        // 1. Atomically restore in-memory Zustand store
+        restoreWorkspace(normalized);
 
-        const confirmation = window.confirm(
-          `Restore Summary:\n` +
-          `• ${folderCount} Resource Folders\n` +
-          `• ${linkCount} Bookmarks\n` +
-          `• ${taskCount} Tasks\n` +
-          `• ${noteCount} Scratchpad Notes\n` +
-          `• ${repCount} Gym Nation Reports\n\n` +
-          `Do you want to overwrite your active workspace with this backup?`
-        );
+        // 2. Persist directly to local cache
+        const uid = user?.uid || "local";
+        try {
+          localStorage.setItem(`${LOCAL_STORAGE_PREFIX}:${uid}`, JSON.stringify(normalized));
+        } catch {}
 
-        if (!confirmation) {
-          setIsProcessing(false);
-          setStatusMessage(null);
-          return;
+        // 3. Persist to Firestore if authenticated cloud user
+        if (uid !== "local") {
+          try {
+            await persistWorkspace(uid, normalized);
+          } catch (cloudErr) {
+            console.warn("Cloud backup write deferred:", cloudErr);
+          }
         }
 
-        setWorkspace(migratedWorkspace);
-        setStatusMessage("Workspace restored successfully!");
-        alert("Workspace backup restored successfully!");
+        const counts = [
+          `${normalized.columns.length} Folders`,
+          `${normalized.links.length} Links`,
+          `${normalized.todos.length} Tasks`,
+          `${normalized.notes?.length ?? 0} Notes`,
+          `${normalized.reports?.length ?? 0} Gym Reports`,
+        ].join(", ");
+
+        setStatusMessage(`Restored: ${counts}`);
+        alert(`Backup Restored Successfully!\n\nImported:\n${counts}`);
       } catch (err) {
-        console.error("Backup restoration failed:", err);
-        alert(
-          err instanceof Error
-            ? `Failed to restore backup: ${err.message}`
-            : "Failed to restore backup. Invalid JSON file."
-        );
+        console.error("Restore failed:", err);
+        const msg = err instanceof Error ? err.message : "Invalid JSON backup file.";
+        setStatusMessage(`Import failed: ${msg}`);
+        alert(`Failed to restore backup: ${msg}`);
       } finally {
         setIsProcessing(false);
-        setTimeout(() => setStatusMessage(null), 4000);
+        if (event.target) {
+          event.target.value = "";
+        }
       }
     };
 
     reader.onerror = () => {
-      alert("Error reading backup file.");
       setIsProcessing(false);
-      setStatusMessage(null);
+      setStatusMessage("Error reading file.");
+      alert("Could not read the selected backup file.");
     };
 
     reader.readAsText(file);
-    event.target.value = "";
   };
 
   return {
     exportBackup,
+    triggerImportClick,
     importBackup,
+    fileInputRef,
     isProcessing,
     statusMessage,
   };

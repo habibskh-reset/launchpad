@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { ArrowLeft, Download, Upload, CheckCircle2, Dumbbell } from "lucide-react";
+import { ArrowLeft, Download, Upload, CheckCircle2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useBackup } from "./useBackup";
@@ -7,7 +7,15 @@ import { useWorkspaceStore } from "@/stores/workspaceStore";
 import { SecuritySettings } from "./SecuritySettings";
 
 export function SettingsPage() {
-  const { exportBackup, importBackup, isProcessing, statusMessage } = useBackup();
+  const {
+    exportBackup,
+    triggerImportClick,
+    handleFileSelected,
+    fileInputRef,
+    isProcessing,
+    statusMessage,
+  } = useBackup();
+
   const user = useWorkspaceStore((s) => s.user);
   const folderCount = useWorkspaceStore((s) => s.workspace.columns.length);
   const linkCount = useWorkspaceStore((s) => s.workspace.links.length);
@@ -56,14 +64,15 @@ export function SettingsPage() {
           </div>
           {statusMessage && (
             <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-500 bg-emerald-500/10 px-2.5 py-1 rounded-lg">
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              <span>{statusMessage}</span>
+              <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate max-w-[200px] sm:max-w-xs">{statusMessage}</span>
             </div>
           )}
         </div>
 
         <div className="flex flex-wrap gap-2 pt-2">
           <Button
+            type="button"
             onClick={exportBackup}
             disabled={isProcessing}
             variant="default"
@@ -74,23 +83,24 @@ export function SettingsPage() {
           </Button>
 
           <Button
-            asChild
-            variant="secondary"
+            type="button"
+            onClick={triggerImportClick}
             disabled={isProcessing}
+            variant="secondary"
             className="cursor-pointer font-bold text-xs rounded-xl h-9 border border-border"
           >
-            <label className="cursor-pointer">
-              <Upload className="h-3.5 w-3.5 mr-1.5" />
-              Restore from Drive / File
-              <input
-                type="file"
-                accept=".json"
-                onChange={importBackup}
-                disabled={isProcessing}
-                className="hidden"
-              />
-            </label>
+            <Upload className="h-3.5 w-3.5 mr-1.5" />
+            Restore from Drive / File
           </Button>
+
+          {/* Hidden input triggered directly by ref */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,application/json"
+            onChange={handleFileSelected}
+            className="hidden"
+          />
         </div>
       </Card>
     </main>

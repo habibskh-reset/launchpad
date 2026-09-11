@@ -37,7 +37,7 @@ export function AppHeader() {
   const lock = useSecurityStore((s) => s.lock);
 
   const { logout } = useAuth();
-  const { exportBackup, importBackup } = useBackup();
+  const { exportBackup, triggerImportClick, importBackup, fileInputRef } = useBackup();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -174,18 +174,12 @@ export function AppHeader() {
                 <Download className="h-3.5 w-3.5 text-muted-foreground" />
                 Export JSON Backup
               </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <label className="cursor-pointer">
-                  <Upload className="h-3.5 w-3.5 text-muted-foreground" />
-                  Import JSON Backup
-                  <input
-                    type="file"
-                    accept=".json"
-                    onChange={importBackup}
-                    className="hidden"
-                  />
-                </label>
+
+              <DropdownMenuItem onSelect={triggerImportClick} className="cursor-pointer">
+                <Upload className="h-3.5 w-3.5 text-muted-foreground" />
+                Import JSON Backup
               </DropdownMenuItem>
+
               <DropdownMenuSeparator />
               <DropdownMenuItem danger onSelect={logout} className="cursor-pointer">
                 <LogOut className="h-3.5 w-3.5" />
@@ -195,6 +189,15 @@ export function AppHeader() {
           </DropdownMenu>
         </div>
       </div>
+
+      {/* Hidden file input mounted outside dropdown to prevent unmount canceling */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".json,application/json"
+        onChange={importBackup}
+        className="hidden"
+      />
     </header>
   );
 }

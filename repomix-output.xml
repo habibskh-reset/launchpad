@@ -49,7 +49,9 @@ src/
   components/
     auth/
       AuthGuard.tsx
+      AuthProvider.tsx
       LoginOverlay.tsx
+      PasscodeOverlay.tsx
       ThemeToggle.tsx
       useAuth.ts
     layout/
@@ -70,6 +72,7 @@ src/
       input.tsx
       label.tsx
   lib/
+    audio.ts
     date.ts
     id.ts
     utils.ts
@@ -84,6 +87,7 @@ src/
       index.tsx
       NoteModal.tsx
       notes.types.ts
+      NoteViewModal.tsx
       useNotes.ts
     Reports/
       EditReportModal.tsx
@@ -92,6 +96,7 @@ src/
       types.ts
     Settings/
       index.tsx
+      SecuritySettings.tsx
       useBackup.ts
     Tasks/
       index.tsx
@@ -100,16 +105,21 @@ src/
     NotFoundPage.tsx
     RouteErrorPage.tsx
   services/
+    backup/
+      schema.ts
     firebase/
       app.ts
       auth.ts
       config.ts
       useWorkspaceSync.ts
       workspace.ts
+    notifications.ts
+    useReminderEngine.ts
   shared/
     api/
       errors.ts
   stores/
+    securityStore.ts
     uiStore.ts
     workspaceStore.ts
   types/
@@ -176,6 +186,56 @@ This section contains the contents of the repository's files.
 }
 </file>
 
+<file path="src/components/auth/AuthProvider.tsx">
+import { useEffect, type ReactNode } from "react";
+import { subscribeAuth } from "@/services/firebase/auth";
+import { useWorkspaceStore } from "@/stores/workspaceStore";
+import type { AppUser } from "@/types/auth";
+
+const LOCAL_USER_KEY = "launchpad_is_local_user";
+
+const LOCAL_USER_PROFILE: AppUser = {
+  uid: "local",
+  email: "local@launchpad",
+  displayName: "Local User",
+  photoURL: null,
+};
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const setUser = useWorkspaceStore((state) => state.setUser);
+
+  useEffect(() => {
+    const unsubscribe = subscribeAuth(
+      (firebaseUser) => {
+        try {
+          const localMode = localStorage.getItem(LOCAL_USER_KEY) === "true";
+          if (firebaseUser) {
+            localStorage.removeItem(LOCAL_USER_KEY);
+            setUser(firebaseUser);
+            return;
+          }
+          if (localMode) {
+            setUser(LOCAL_USER_PROFILE);
+            return;
+          }
+          setUser(null);
+        } catch {
+          setUser(firebaseUser ?? null);
+        }
+      },
+      (error) => {
+        console.error("Auth listener error:", error);
+        setUser(null);
+      }
+    );
+
+    return unsubscribe;
+  }, [setUser]);
+
+  return <>{children}</>;
+}
+</file>
+
 <file path="src/components/auth/LoginOverlay.tsx">
 import { Compass } from "lucide-react";
 import { useAuth } from "./useAuth";
@@ -231,6 +291,154 @@ export function LoginOverlay() {
 }
 </file>
 
+<file path="src/components/auth/PasscodeOverlay.tsx">
+import { useState, useEffect } from "react";
+import { Lock, AlertCircle, ShieldAlert } from "lucide-react";
+import { useSecurityStore } from "@/stores/securityStore";
+import { Button } from "@/components/ui/button";
+
+export function PasscodeOverlay() {
+  const isLocked = useSecurityStore((s) => s.isLocked);
+  const unlock = useSecurityStore((s) => s.unlock);
+  const lock = useSecurityStore((s) => s.lock);
+  const passcode = useSecurityStore((s) => s.passcode);
+  const timeoutDuration = useSecurityStore((s) => s.timeoutDuration);
+  const lockOnTabSwitch = useSecurityStore((s) => s.lockOnTabSwitch);
+  const lockoutUntil = useSecurityStore((s) => s.lockoutUntil);
+
+  const [input, setInput] = useState("");
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [rateLimitSeconds, setRateLimitSeconds] = useState(0);
+
+  // Rate-limit timer countdown
+  useEffect(() => {
+    if (!lockoutUntil) {
+      setRateLimitSeconds(0);
+      return;
+    }
+
+    const updateCountdown = () => {
+      const remaining = Math.max(0, Math.ceil((lockoutUntil - Date.now()) / 1000));
+      setRateLimitSeconds(remaining);
+      if (remaining === 0) {
+        setErrorMsg(null);
+      }
+    };
+
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, [lockoutUntil]);
+
+  // Background inactivity and visibility listeners
+  useEffect(() => {
+    if (!passcode) return;
+
+    let lastActive = Date.now();
+    const updateActivity = () => {
+      lastActive = Date.now();
+    };
+
+    const handleVisibility = () => {
+      if (document.hidden && lockOnTabSwitch) {
+        lock();
+      } else {
+        updateActivity();
+      }
+    };
+
+    const checkLock = setInterval(() => {
+      if (timeoutDuration > 0 && !isLocked && Date.now() - lastActive > timeoutDuration) {
+        lock();
+      }
+    }, 4000);
+
+    window.addEventListener("pointerdown", updateActivity);
+    window.addEventListener("keydown", updateActivity);
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      clearInterval(checkLock);
+      window.removeEventListener("pointerdown", updateActivity);
+      window.removeEventListener("keydown", updateActivity);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [passcode, timeoutDuration, isLocked, lockOnTabSwitch, lock]);
+
+  if (!isLocked) return null;
+
+  const handleUnlock = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (rateLimitSeconds > 0) return;
+
+    const res = unlock(input);
+    if (res.success) {
+      setInput("");
+      setErrorMsg(null);
+    } else if (res.rateLimited) {
+      setErrorMsg("Too many attempts. Locked for 30s.");
+      setInput("");
+    } else {
+      setErrorMsg("Incorrect passcode.");
+      setInput("");
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-background/95 backdrop-blur-xl p-4">
+      <div className="w-14 h-14 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mb-4 shadow-sm border border-primary/20">
+        <Lock className="w-7 h-7" strokeWidth={2.25} />
+      </div>
+
+      <h2 className="text-xl font-bold tracking-tight mb-1 text-center">Workspace Locked</h2>
+      <p className="text-xs text-muted-foreground mb-6 text-center max-w-xs">
+        Enter your passcode to resume your active session.
+      </p>
+
+      <form onSubmit={handleUnlock} className="flex flex-col gap-3 w-full max-w-[260px]">
+        <input
+          type="password"
+          autoFocus
+          disabled={rateLimitSeconds > 0}
+          value={input}
+          onChange={(e) => {
+            setInput(e.target.value);
+            if (errorMsg) setErrorMsg(null);
+          }}
+          className={`flex h-12 w-full rounded-xl border ${
+            errorMsg ? "border-destructive bg-destructive/5" : "border-input bg-card"
+          } px-3 py-2 text-center text-xl font-mono tracking-[0.4em] outline-none focus-visible:ring-2 focus-visible:ring-primary shadow-sm transition-all disabled:opacity-50`}
+          placeholder="••••"
+          maxLength={8}
+        />
+
+        {errorMsg && (
+          <div className="flex items-center justify-center gap-1.5 text-destructive text-xs font-semibold">
+            <AlertCircle className="w-3.5 h-3.5" />
+            <span>{errorMsg}</span>
+          </div>
+        )}
+
+        {rateLimitSeconds > 0 && (
+          <div className="flex items-center justify-center gap-1.5 text-amber-500 text-xs font-medium">
+            <ShieldAlert className="w-3.5 h-3.5" />
+            <span>Wait {rateLimitSeconds}s to retry</span>
+          </div>
+        )}
+
+        <Button
+          type="submit"
+          disabled={rateLimitSeconds > 0 || !input.trim()}
+          className="w-full font-bold h-10 rounded-xl mt-1 cursor-pointer"
+        >
+          Unlock Session
+        </Button>
+      </form>
+    </div>
+  );
+}
+</file>
+
 <file path="src/components/auth/ThemeToggle.tsx">
 import { useCallback, useEffect, type ReactNode } from "react";
 import { Moon, Sun } from "lucide-react";
@@ -281,104 +489,6 @@ export function ThemeToggle() {
       <Moon className="h-4 w-4 block dark:hidden" />
     </Button>
   );
-}
-</file>
-
-<file path="src/components/auth/useAuth.ts">
-import { useEffect, useState } from "react";
-import { subscribeAuth, signInWithGoogle, signOutCurrent } from "@/services/firebase/auth";
-import { toAppError } from "@/shared/api/errors";
-import { useWorkspaceStore } from "@/stores/workspaceStore";
-import type { AppUser } from "@/types/auth";
-
-const LOCAL_USER_KEY = "launchpad_is_local_user";
-
-const LOCAL_USER_PROFILE: AppUser = {
-  uid: "local",
-  email: "local@launchpad",
-  displayName: "Local User",
-  photoURL: null,
-};
-
-export function useAuth() {
-  const setUser = useWorkspaceStore((state) => state.setUser);
-  const user = useWorkspaceStore((state) => state.user);
-  const [authError, setAuthError] = useState<string | null>(null);
-  const [authBusy, setAuthBusy] = useState(false);
-
-  useEffect(() => {
-    const unsubscribe = subscribeAuth(
-      (firebaseUser) => {
-        try {
-          const localMode = localStorage.getItem(LOCAL_USER_KEY) === "true";
-          if (firebaseUser) {
-            localStorage.removeItem(LOCAL_USER_KEY);
-            setUser(firebaseUser);
-            return;
-          }
-          if (localMode) {
-            setUser(LOCAL_USER_PROFILE);
-            return;
-          }
-          setUser(null);
-        } catch {
-          setUser(firebaseUser ?? null);
-        }
-      },
-      (error) => {
-        setAuthError(toAppError(error).message);
-      },
-    );
-
-    return unsubscribe;
-  }, [setUser]);
-
-  const login = async () => {
-    setAuthError(null);
-    setAuthBusy(true);
-    try {
-      try {
-        localStorage.removeItem(LOCAL_USER_KEY);
-      } catch {
-        // Ignore
-      }
-      await signInWithGoogle();
-    } catch (error) {
-      setAuthError(toAppError(error).message);
-    } finally {
-      setAuthBusy(false);
-    }
-  };
-
-  const loginLocal = () => {
-    setAuthError(null);
-    try {
-      localStorage.setItem(LOCAL_USER_KEY, "true");
-    } catch {
-      // Ignore
-    }
-    setUser(LOCAL_USER_PROFILE);
-  };
-
-  const logout = async () => {
-    setAuthError(null);
-    try {
-      localStorage.removeItem(LOCAL_USER_KEY);
-    } catch {
-      // Ignore
-    }
-    try {
-      await signOutCurrent();
-    } catch (error) {
-      if (user && user.uid !== "local") {
-        setAuthError(toAppError(error).message);
-        return;
-      }
-    }
-    setUser(null);
-  };
-
-  return { user, authError, authBusy, login, loginLocal, logout };
 }
 </file>
 
@@ -988,6 +1098,49 @@ const Label = React.forwardRef<
 Label.displayName = LabelPrimitive.Root.displayName;
 
 export { Label };
+</file>
+
+<file path="src/lib/audio.ts">
+export function playReminderChime(): void {
+  try {
+    const AudioContextClass =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext })
+        .webkitAudioContext;
+    if (!AudioContextClass) return;
+
+    const ctx = new AudioContextClass();
+    const now = ctx.currentTime;
+
+    const playTone = (freq: number, start: number, duration: number) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, start);
+
+      gain.gain.setValueAtTime(0.001, start);
+      gain.gain.exponentialRampToValueAtTime(0.25, start + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + duration);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(start);
+      osc.stop(start + duration);
+    };
+
+    // Dual chime tone
+    playTone(880, now, 0.18);
+    playTone(1320, now + 0.15, 0.35);
+
+    setTimeout(() => {
+      void ctx.close();
+    }, 1000);
+  } catch {
+    // Suppressed if browser audio context is blocked prior to user interaction
+  }
+}
 </file>
 
 <file path="src/lib/date.ts">
@@ -1649,168 +1802,6 @@ export function LinkModal() {
 }
 </file>
 
-<file path="src/pages/Notes/index.tsx">
-import { useState, useMemo } from "react";
-import { Edit3, FileText, Pin, Plus, Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { useConfirmDialog } from "@/components/shared/ConfirmDialog";
-import { useNotes } from "./useNotes";
-import { NoteModal } from "./NoteModal";
-import { cn } from "@/lib/utils";
-import type { NoteItem } from "./notes.types";
-
-const NOTE_COLORS: Record<string, { bg: string; border: string }> = {
-  default: { bg: "bg-card/80", border: "border-border" },
-  amber: { bg: "bg-amber-500/10", border: "border-amber-500/30" },
-  emerald: { bg: "bg-emerald-500/10", border: "border-emerald-500/30" },
-  violet: { bg: "bg-violet-500/10", border: "border-violet-500/30" },
-  rose: { bg: "bg-rose-500/10", border: "border-rose-500/30" },
-  blue: { bg: "bg-blue-500/10", border: "border-blue-500/30" },
-};
-
-export function NotesPage({ searchTerm = "" }: { searchTerm?: string }) {
-  const { notes, addNote, updateNote, togglePin, removeNote } = useNotes();
-  const { confirm, ConfirmDialogElement } = useConfirmDialog();
-
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingNote, setEditingNote] = useState<NoteItem | null>(null);
-
-  const filteredNotes = useMemo(() => {
-    const q = searchTerm.toLowerCase().trim();
-    if (!q) return notes;
-    return notes.filter(
-      (n) => n.title.toLowerCase().includes(q) || n.content.toLowerCase().includes(q),
-    );
-  }, [notes, searchTerm]);
-
-  const handleOpenAdd = () => {
-    setEditingNote(null);
-    setModalOpen(true);
-  };
-
-  const handleOpenEdit = (note: NoteItem) => {
-    setEditingNote(note);
-    setModalOpen(true);
-  };
-
-  const handleDelete = async (note: NoteItem) => {
-    if (await confirm(`Delete note "${note.title}"?`)) {
-      removeNote(note.id);
-    }
-  };
-
-  const handleSave = (payload: { title: string; content: string; color: NoteItem["color"] }) => {
-    if (editingNote) {
-      updateNote(editingNote.id, payload);
-    } else {
-      addNote(payload);
-    }
-  };
-
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold">
-            <FileText className="h-4 w-4" />
-          </div>
-          <div>
-            <h2 className="font-bold text-sm text-foreground">Scratchpad & Notes</h2>
-            <p className="text-[11px] text-muted-foreground">
-              {filteredNotes.length} {filteredNotes.length === 1 ? "note" : "notes"} recorded
-            </p>
-          </div>
-        </div>
-
-        <Button size="sm" onClick={handleOpenAdd} className="rounded-xl font-bold text-xs">
-          <Plus className="h-3.5 w-3.5 mr-1" /> New Note
-        </Button>
-      </div>
-
-      {filteredNotes.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border bg-card/50 p-12 text-center flex flex-col items-center gap-2">
-          <FileText className="h-8 w-8 text-muted-foreground/40 mb-1" />
-          <div className="text-sm font-semibold">No notes found</div>
-          <p className="text-xs text-muted-foreground max-w-sm">
-            {searchTerm ? "No notes match your search query." : "Capture ideas or scratchpad notes anytime."}
-          </p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-          {filteredNotes.map((note) => {
-            const color = NOTE_COLORS[note.color ?? "default"] ?? NOTE_COLORS.default;
-
-            return (
-              <div
-                key={note.id}
-                className={cn(
-                  "group relative rounded-2xl border p-4 flex flex-col justify-between transition-all shadow-sm",
-                  color.bg,
-                  color.border,
-                )}
-              >
-                <div>
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <h3 className="font-bold text-sm text-foreground leading-snug line-clamp-2">
-                      {note.title}
-                    </h3>
-                    <button
-                      type="button"
-                      onClick={() => togglePin(note.id)}
-                      className={cn(
-                        "p-1 rounded-lg transition-colors flex-shrink-0",
-                        note.pinned ? "text-primary hover:text-primary/80" : "text-muted-foreground/50 hover:text-foreground",
-                      )}
-                      title={note.pinned ? "Unpin note" : "Pin note"}
-                    >
-                      <Pin className="h-3.5 w-3.5" fill={note.pinned ? "currentColor" : "none"} />
-                    </button>
-                  </div>
-
-                  <p className="text-xs text-muted-foreground whitespace-pre-wrap leading-relaxed line-clamp-6">
-                    {note.content}
-                  </p>
-                </div>
-
-                <div className="pt-4 flex items-center justify-between border-t border-border/50 mt-4 text-[10px] text-muted-foreground">
-                  <span>{new Date(note.updatedAt).toLocaleDateString()}</span>
-                  <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
-                    <button
-                      type="button"
-                      onClick={() => handleOpenEdit(note)}
-                      className="p-1 rounded hover:bg-background/80 text-muted-foreground hover:text-foreground transition-colors"
-                      title="Edit"
-                    >
-                      <Edit3 className="h-3 w-3" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(note)}
-                      className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                      title="Delete"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      <NoteModal
-        open={modalOpen}
-        onOpenChange={setModalOpen}
-        note={editingNote}
-        onSave={handleSave}
-      />
-      {ConfirmDialogElement}
-    </div>
-  );
-}
-</file>
-
 <file path="src/pages/Notes/NoteModal.tsx">
 import { useState, type FormEvent, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -1934,6 +1925,67 @@ export type NoteCreateInput = {
 export type NoteUpdateInput = Partial<
   Pick<NoteItem, "title" | "content" | "pinned" | "color">
 >;
+</file>
+
+<file path="src/pages/Notes/NoteViewModal.tsx">
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Edit3 } from "lucide-react";
+import type { NoteItem } from "./notes.types";
+
+interface NoteViewModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  note: NoteItem | null;
+  onEdit: (note: NoteItem) => void;
+}
+
+export function NoteViewModal({ open, onOpenChange, note, onEdit }: NoteViewModalProps) {
+  if (!note) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg p-6">
+        <DialogHeader className="border-b border-border/50 pb-3">
+          <DialogTitle className="text-base font-bold text-foreground">
+            {note.title}
+          </DialogTitle>
+          <div className="text-[11px] text-muted-foreground">
+            Last updated: {new Date(note.updatedAt).toLocaleString()}
+          </div>
+        </DialogHeader>
+
+        <div className="py-3 text-xs leading-relaxed whitespace-pre-wrap max-h-[60vh] overflow-y-auto text-foreground/90 font-sans">
+          {note.content}
+        </div>
+
+        <div className="flex justify-end gap-2 border-t border-border/50 pt-3">
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => onOpenChange(false)}
+            className="rounded-xl text-xs"
+          >
+            Close
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => {
+              onOpenChange(false);
+              onEdit(note);
+            }}
+            className="rounded-xl font-bold text-xs gap-1.5"
+          >
+            <Edit3 className="h-3.5 w-3.5" />
+            Edit Note
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 </file>
 
 <file path="src/pages/Notes/useNotes.ts">
@@ -2234,954 +2286,273 @@ export function getWorkWeekRange(date: Date): { startStr: string; endStr: string
 }
 </file>
 
-<file path="src/pages/Settings/index.tsx">
-import { Download, Upload } from "lucide-react";
+<file path="src/pages/Settings/SecuritySettings.tsx">
+import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { useBackup } from "./useBackup";
-import { useWorkspaceStore } from "@/stores/workspaceStore";
-
-export function SettingsPage() {
-  const { exportBackup, importBackup } = useBackup();
-  const user = useWorkspaceStore((s) => s.user);
-  const folderCount = useWorkspaceStore((s) => s.workspace.columns.length);
-  const linkCount = useWorkspaceStore((s) => s.workspace.links.length);
-  const todoCount = useWorkspaceStore((s) => s.workspace.todos.length);
-  const noteCount = useWorkspaceStore((s) => s.workspace.notes?.length ?? 0);
-
-  return (
-    <main className="flex-1 max-w-3xl mx-auto w-full p-4 sm:p-6 flex flex-col gap-6 pb-20 lg:pb-8">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-lg font-semibold tracking-tight">Settings</h1>
-        <p className="text-sm text-muted-foreground">
-          Signed in as {user?.email ?? "anonymous"}
-        </p>
-      </header>
-
-      <Card className="p-5 space-y-3">
-        <h2 className="font-medium text-sm">Workspace overview</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
-          <Stat label="Folders" value={folderCount} />
-          <Stat label="Links" value={linkCount} />
-          <Stat label="Todos" value={todoCount} />
-          <Stat label="Notes" value={noteCount} />
-        </div>
-      </Card>
-
-      <Card className="p-5 space-y-3">
-        <h2 className="font-medium text-sm">Backup & restore</h2>
-        <p className="text-sm text-muted-foreground">
-          Export your workspace as JSON, or import a previous backup.
-        </p>
-        <div className="flex flex-wrap gap-2">
-          <Button onClick={exportBackup} variant="default" className="cursor-pointer">
-            <Download className="h-3.5 w-3.5" />
-            Export Backup
-          </Button>
-          <Button asChild variant="secondary" className="cursor-pointer">
-            <label className="cursor-pointer">
-              <Upload className="h-3.5 w-3.5" />
-              Import Backup
-              <input
-                type="file"
-                accept=".json"
-                onChange={importBackup}
-                className="hidden"
-              />
-            </label>
-          </Button>
-        </div>
-      </Card>
-    </main>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-md bg-muted border border-border p-3">
-      <div className="text-xl font-semibold">{value}</div>
-      <div className="text-[11px] text-muted-foreground">{label}</div>
-    </div>
-  );
-}
-</file>
-
-<file path="src/pages/Tasks/index.tsx">
-import { useState, useMemo, type FormEvent } from "react";
-import { 
-  ArrowLeft, 
-  ArrowRight, 
-  Calendar, 
-  Check, 
-  CheckCircle2, 
-  ListTodo, 
-  Pencil, 
-  Plus, 
-  Trash2, 
-  FileText, 
-  Pin, 
-  Edit3
-} from "lucide-react";
-import { useTasks } from "./useTasks";
-import { useNotes } from "@/pages/Notes/useNotes";
-import { NoteModal } from "@/pages/Notes/NoteModal";
-import { formatDateLabel, getTodayDate, addDays, getWeekStart, getWeekEnd, formatWeekday } from "@/lib/date";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { TaskModal } from "./TaskModal";
-import { cn } from "@/lib/utils";
-import type { TaskPriority, TodoItem } from "@/types/workspace";
-import type { NoteItem } from "@/pages/Notes/notes.types";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { useSecurityStore, type TimeoutDuration } from "@/stores/securityStore";
+import { ShieldCheck, ShieldAlert, Lock, KeyRound } from "lucide-react";
 
-type ViewMode = "today" | "thisWeek" | "nextWeek";
-
-const PRIORITIES: { id: TaskPriority; label: string; activeStyle: string }[] = [
-  { id: "low", label: "Low", activeStyle: "bg-emerald-500 text-white font-bold" },
-  { id: "medium", label: "Med", activeStyle: "bg-amber-500 text-slate-950 font-bold" },
-  { id: "high", label: "High", activeStyle: "bg-rose-500 text-white font-bold" },
-];
-
-const NOTE_COLORS: Record<string, { bg: string; border: string }> = {
-  default: { bg: "bg-card/80", border: "border-border" },
-  amber: { bg: "bg-amber-500/10", border: "border-amber-500/30" },
-  emerald: { bg: "bg-emerald-500/10", border: "border-emerald-500/30" },
-  violet: { bg: "bg-violet-500/10", border: "border-violet-500/30" },
-  rose: { bg: "bg-rose-500/10", border: "border-rose-500/30" },
-  blue: { bg: "bg-blue-500/10", border: "border-blue-500/30" },
-};
-
-export function TasksPage({ searchTerm = "" }: { searchTerm?: string }) {
+export function SecuritySettings() {
   const {
-    thisWeek,
-    nextWeek,
-    add,
-    update,
-    toggle,
-    remove,
-    moveToNextWeek,
-    moveToThisWeek,
-  } = useTasks();
+    passcode,
+    setPasscode,
+    changePasscode,
+    removePasscode,
+    lock,
+    timeoutDuration,
+    setTimeoutDuration,
+    lockOnTabSwitch,
+    setLockOnTabSwitch,
+  } = useSecurityStore();
 
-  const { notes, addNote, updateNote, togglePin, removeNote } = useNotes();
+  const [newCode, setNewCode] = useState("");
+  const [isChanging, setIsChanging] = useState(false);
+  const [currentCode, setCurrentCode] = useState("");
+  const [nextCode, setNextCode] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
 
-  const today = getTodayDate();
-  const weekStart = getWeekStart();
-  const weekEnd = getWeekEnd();
+  const [isRemoving, setIsRemoving] = useState(false);
+  const [removeVerifyCode, setRemoveVerifyCode] = useState("");
 
-  const [mode, setMode] = useState<ViewMode>("today");
-  const [draft, setDraft] = useState("");
-  const [priority, setPriority] = useState<TaskPriority>("medium");
-  const [editingTask, setEditingTask] = useState<TodoItem | null>(null);
-
-  // Notes Modal state
-  const [noteModalOpen, setNoteModalOpen] = useState(false);
-  const [editingNote, setEditingNote] = useState<NoteItem | null>(null);
-
-  const dateBadge = useMemo(() => {
-    if (mode === "today") return formatDateLabel();
-    if (mode === "thisWeek") return `${formatWeekday(weekStart)} – ${formatWeekday(weekEnd)}`;
-    const nextStart = addDays(weekEnd, 1);
-    const nextEnd = addDays(weekEnd, 7);
-    return `${formatWeekday(nextStart)} – ${formatWeekday(nextEnd)}`;
-  }, [mode, weekStart, weekEnd]);
-
-  const activeTasks = useMemo(() => {
-    let list: TodoItem[] = [];
-    if (mode === "today") {
-      list = thisWeek.filter((t) => !t.dueDate || t.dueDate <= today);
-    } else if (mode === "thisWeek") {
-      list = thisWeek;
-    } else {
-      list = nextWeek;
-    }
-
-    const q = searchTerm.toLowerCase().trim();
-    if (!q) return list;
-    return list.filter((t) => t.text.toLowerCase().includes(q));
-  }, [mode, thisWeek, nextWeek, today, searchTerm]);
-
-  const filteredNotes = useMemo(() => {
-    const q = searchTerm.toLowerCase().trim();
-    if (!q) return notes;
-    return notes.filter((n) => n.title.toLowerCase().includes(q) || n.content.toLowerCase().includes(q));
-  }, [notes, searchTerm]);
-
-  const completedCount = activeTasks.filter((t) => t.done).length;
-  const totalCount = activeTasks.length;
-
-  const handleAddTask = (e: FormEvent) => {
+  const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
-    const trimmed = draft.trim();
-    if (!trimmed) return;
-
-    add({
-      text: trimmed,
-      dueDate: mode === "nextWeek" ? addDays(weekEnd, 1) : today,
-      priority,
-      reminder: false,
-    });
-    setDraft("");
+    if (newCode.trim().length >= 4) {
+      setPasscode(newCode.trim());
+      setNewCode("");
+    }
   };
 
-  const handleSaveNote = (payload: { title: string; content: string; color: NoteItem["color"] }) => {
-    if (editingNote) {
-      updateNote(editingNote.id, payload);
+  const handleChange = (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg("");
+    if (nextCode.trim().length < 4) {
+      setErrorMsg("New passcode must be at least 4 digits.");
+      return;
+    }
+    const success = changePasscode(currentCode, nextCode.trim());
+    if (success) {
+      setIsChanging(false);
+      setCurrentCode("");
+      setNextCode("");
     } else {
-      addNote(payload);
+      setErrorMsg("Current passcode is incorrect.");
+    }
+  };
+
+  const handleRemove = (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg("");
+    const success = removePasscode(removeVerifyCode);
+    if (success) {
+      setIsRemoving(false);
+      setRemoveVerifyCode("");
+    } else {
+      setErrorMsg("Passcode incorrect.");
     }
   };
 
   return (
-    <div className="flex flex-col gap-5 max-w-6xl mx-auto w-full pb-16">
-      {/* Top Header Card */}
-      <div className="rounded-2xl border border-border bg-card/70 backdrop-blur-xl p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-primary/10 text-primary flex items-center justify-center font-bold flex-shrink-0">
-            {mode === "today" ? <Calendar className="h-5 w-5" /> : <ListTodo className="h-5 w-5" />}
-          </div>
+    <Card className="p-5 space-y-4">
+      <div className="flex items-center justify-between border-b border-border/50 pb-3">
+        <div className="flex items-center gap-2">
+          {passcode ? (
+            <ShieldCheck className="h-5 w-5 text-emerald-500" />
+          ) : (
+            <ShieldAlert className="h-5 w-5 text-muted-foreground" />
+          )}
           <div>
-            <div className="flex items-center gap-2">
-              <h2 className="font-bold text-sm text-foreground">
-                {mode === "today" ? "Today's Agenda" : mode === "thisWeek" ? "This Week" : "Next Week"}
-              </h2>
-              <span className="text-[11px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-semibold">
-                {dateBadge}
-              </span>
-            </div>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {totalCount === 0
-                ? "No tasks scheduled."
-                : `${completedCount} of ${totalCount} completed (${Math.round(
-                    (completedCount / (totalCount || 1)) * 100,
-                  )}%)`}
+            <h2 className="font-semibold text-sm">Session Security & Passcode</h2>
+            <p className="text-[11px] text-muted-foreground">
+              Protect local access on this device without signing out of Firebase
             </p>
           </div>
         </div>
 
-        <div className="flex rounded-xl bg-muted p-1 text-xs font-semibold gap-1 self-start sm:self-auto">
-          <button
-            type="button"
-            onClick={() => setMode("today")}
-            className={cn(
-              "px-3 py-1 rounded-lg transition-all cursor-pointer",
-              mode === "today" ? "bg-background text-foreground shadow-sm font-bold" : "text-muted-foreground",
-            )}
+        {passcode && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={lock}
+            className="rounded-xl font-bold text-xs gap-1.5 cursor-pointer h-8"
           >
-            Today
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode("thisWeek")}
-            className={cn(
-              "px-3 py-1 rounded-lg transition-all cursor-pointer",
-              mode === "thisWeek" ? "bg-background text-foreground shadow-sm font-bold" : "text-muted-foreground",
-            )}
-          >
-            This Week
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode("nextWeek")}
-            className={cn(
-              "px-3 py-1 rounded-lg transition-all cursor-pointer",
-              mode === "nextWeek" ? "bg-background text-foreground shadow-sm font-bold" : "text-muted-foreground",
-            )}
-          >
-            Next Week
-          </button>
-        </div>
+            <Lock className="h-3.5 w-3.5" />
+            <span>Lock Now</span>
+          </Button>
+        )}
       </div>
 
-      {/* 2-Column Responsive Layout: Left Tasks, Right Scratchpad Notes */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-        {/* Left Side: Tasks (7 cols) */}
-        <div className="lg:col-span-7 flex flex-col rounded-2xl border border-border bg-card/70 backdrop-blur-xl shadow-sm overflow-hidden">
-          <form
-            onSubmit={handleAddTask}
-            className="p-3 border-b border-border bg-background/50 flex items-center gap-2"
-          >
-            <Input
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder={`Add task to ${mode === "today" ? "Today" : mode === "thisWeek" ? "This Week" : "Next Week"}...`}
-              className="h-10 bg-card border-border rounded-xl text-xs sm:text-sm font-medium focus-visible:ring-primary"
-            />
-            <div className="flex items-center gap-1">
-              {PRIORITIES.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => setPriority(p.id)}
-                  className={cn(
-                    "px-2.5 py-1.5 rounded-lg text-[10px] font-semibold border transition-all cursor-pointer",
-                    priority === p.id ? p.activeStyle : "border-border bg-card text-muted-foreground",
-                  )}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-            <Button
-              type="submit"
-              size="sm"
-              disabled={!draft.trim()}
-              className="h-10 px-4 rounded-xl font-bold bg-primary text-primary-foreground shrink-0 shadow-sm cursor-pointer"
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
-          </form>
-
-          <ul className="p-3 space-y-2 max-h-[520px] overflow-y-auto">
-            {activeTasks.length === 0 ? (
-              <li className="py-12 text-center text-xs text-muted-foreground flex flex-col items-center gap-1">
-                <CheckCircle2 className="h-6 w-6 text-muted-foreground/30 mb-1" />
-                <span>No tasks in this view. Type above to add one.</span>
-              </li>
-            ) : (
-              activeTasks.map((task) => (
-                <li
-                  key={task.id}
-                  className={cn(
-                    "group flex items-center justify-between gap-3 p-2.5 rounded-xl border border-border bg-card/80 hover:border-primary/40 transition-all shadow-sm",
-                    task.done && "opacity-50 bg-muted/20 border-transparent",
-                  )}
-                >
-                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                    <button
-                      type="button"
-                      onClick={() => toggle(task.id)}
-                      className={cn(
-                        "w-5 h-5 rounded-lg border flex items-center justify-center flex-shrink-0 transition-colors cursor-pointer",
-                        task.done
-                          ? "bg-emerald-500 border-emerald-500 text-white"
-                          : "border-muted-foreground/40 hover:border-primary bg-background",
-                      )}
-                    >
-                      {task.done && <Check className="h-3 w-3 stroke-[3]" />}
-                    </button>
-                    <span
-                      className={cn(
-                        "text-xs sm:text-sm font-medium truncate",
-                        task.done ? "line-through text-muted-foreground" : "text-foreground",
-                      )}
-                    >
-                      {task.text}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
-                    {!task.done && (
-                      <button
-                        type="button"
-                        onClick={() => setEditingTask(task)}
-                        className="p-1 text-muted-foreground hover:text-foreground cursor-pointer"
-                        title="Edit task"
-                      >
-                        <Pencil className="h-3 w-3" />
-                      </button>
-                    )}
-
-                    {mode !== "nextWeek" && !task.done && (
-                      <button
-                        type="button"
-                        onClick={() => moveToNextWeek(task.id)}
-                        className="p-1 text-muted-foreground hover:text-foreground cursor-pointer"
-                        title="Move to Next Week"
-                      >
-                        <ArrowRight className="h-3 w-3" />
-                      </button>
-                    )}
-
-                    {mode === "nextWeek" && !task.done && (
-                      <button
-                        type="button"
-                        onClick={() => moveToThisWeek(task.id)}
-                        className="p-1 text-muted-foreground hover:text-emerald-500 cursor-pointer"
-                        title="Move to Current Week / Today"
-                      >
-                        <ArrowLeft className="h-3 w-3" />
-                      </button>
-                    )}
-
-                    <button
-                      type="button"
-                      onClick={() => remove(task.id)}
-                      className="p-1 text-muted-foreground hover:text-destructive cursor-pointer"
-                      title="Delete"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
-                  </div>
-                </li>
-              ))
-            )}
-          </ul>
-        </div>
-
-        {/* Right Side: Colorful Scratchpad Notes (5 cols) */}
-        <div className="lg:col-span-5 flex flex-col gap-3">
-          <div className="flex items-center justify-between px-1">
-            <div className="flex items-center gap-2">
-              <FileText className="h-4 w-4 text-primary" />
-              <h3 className="font-bold text-xs uppercase tracking-wider text-muted-foreground">
-                Scratchpad Notes ({filteredNotes.length})
-              </h3>
-            </div>
-            <Button
-              size="sm"
-              onClick={() => {
-                setEditingNote(null);
-                setNoteModalOpen(true);
-              }}
-              className="rounded-xl font-bold text-xs cursor-pointer h-8"
-            >
-              <Plus className="h-3.5 w-3.5 mr-1" /> New Note
-            </Button>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-2.5 max-h-[520px] overflow-y-auto pr-1">
-            {filteredNotes.length === 0 ? (
-              <div className="p-8 text-center text-xs text-muted-foreground border border-dashed border-border rounded-2xl bg-card/40">
-                No notes captured yet. Click "+ New Note" to save thoughts, links, or ideas.
-              </div>
-            ) : (
-              filteredNotes.map((note) => {
-                const color = NOTE_COLORS[note.color ?? "default"] ?? NOTE_COLORS.default;
-                return (
-                  <div
-                    key={note.id}
-                    className={cn(
-                      "group rounded-2xl border p-3.5 flex flex-col justify-between transition-all shadow-sm",
-                      color.bg,
-                      color.border,
-                    )}
-                  >
-                    <div>
-                      <div className="flex items-start justify-between gap-2 mb-1.5">
-                        <h4 className="font-bold text-xs text-foreground line-clamp-1">
-                          {note.title}
-                        </h4>
-                        <button
-                          type="button"
-                          onClick={() => togglePin(note.id)}
-                          className={cn(
-                            "p-1 rounded transition-colors flex-shrink-0 cursor-pointer",
-                            note.pinned ? "text-primary font-bold" : "text-muted-foreground/40 hover:text-foreground",
-                          )}
-                        >
-                          <Pin className="h-3 w-3" fill={note.pinned ? "currentColor" : "none"} />
-                        </button>
-                      </div>
-                      <p className="text-xs text-muted-foreground whitespace-pre-wrap line-clamp-4 leading-relaxed font-medium">
-                        {note.content}
-                      </p>
-                    </div>
-
-                    <div className="pt-3 flex items-center justify-between border-t border-border/40 mt-3 text-[10px] text-muted-foreground">
-                      <span>{new Date(note.updatedAt).toLocaleDateString()}</span>
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditingNote(note);
-                            setNoteModalOpen(true);
-                          }}
-                          className="p-1 rounded hover:bg-background/80 text-muted-foreground hover:text-foreground cursor-pointer"
-                        >
-                          <Edit3 className="h-3 w-3" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => removeNote(note.id)}
-                          className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive cursor-pointer"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-      </div>
-
-      <TaskModal
-        open={Boolean(editingTask)}
-        onOpenChange={(open) => !open && setEditingTask(null)}
-        task={editingTask}
-        onSave={(id, patch) => update(id, patch)}
-      />
-
-      <NoteModal
-        open={noteModalOpen}
-        onOpenChange={setNoteModalOpen}
-        note={editingNote}
-        onSave={handleSaveNote}
-      />
-    </div>
-  );
-}
-</file>
-
-<file path="src/pages/Tasks/TaskModal.tsx">
-import { useState, type FormEvent } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { getTodayDate } from "@/lib/date";
-import type { TaskPriority, TodoItem } from "@/types/workspace";
-
-interface TaskModalProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  task: TodoItem | null;
-  onSave: (id: string, patch: { text: string; priority: TaskPriority; dueDate: string }) => void;
-}
-
-const PRIORITIES: { id: TaskPriority; label: string }[] = [
-  { id: "low", label: "Low" },
-  { id: "medium", label: "Med" },
-  { id: "high", label: "High" },
-];
-
-export function TaskModal({ open, onOpenChange, task, onSave }: TaskModalProps) {
-  const [text, setText] = useState(task?.text ?? "");
-  const [priority, setPriority] = useState<TaskPriority>(task?.priority ?? "medium");
-  const [dueDate, setDueDate] = useState(task?.dueDate ?? getTodayDate());
-
-  useState(() => {
-    if (task) {
-      setText(task.text);
-      setPriority(task.priority ?? "medium");
-      setDueDate(task.dueDate ?? getTodayDate());
-    }
-  });
-
-  const handleSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    if (!task || !text.trim()) return;
-    onSave(task.id, { text: text.trim(), priority, dueDate });
-    onOpenChange(false);
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="text-sm font-semibold">Edit Task</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-3 pt-1">
-          <div>
-            <Input
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              placeholder="Task description..."
-              className="text-sm"
-              autoFocus
-              required
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
+      {!passcode ? (
+        <form onSubmit={handleCreate} className="space-y-4 pt-1">
+          <p className="text-xs text-muted-foreground">
+            Set a 4 to 8-digit passcode and select when your workspace should automatically lock.
+          </p>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
             <div>
-              <label className="block text-[10px] font-bold text-muted-foreground uppercase mb-1">
-                Due Date
-              </label>
-              <input
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                className="w-full h-9 px-2 rounded-md bg-background border border-input text-xs"
+              <Label className="text-[10px] font-bold uppercase text-muted-foreground mb-1 block">
+                Create Passcode (4-8 Digits)
+              </Label>
+              <Input
+                type="password"
+                placeholder="••••"
+                value={newCode}
+                onChange={(e) => setNewCode(e.target.value)}
+                maxLength={8}
+                className="font-mono tracking-widest text-sm rounded-xl h-9"
               />
             </div>
+
             <div>
-              <label className="block text-[10px] font-bold text-muted-foreground uppercase mb-1">
-                Priority
-              </label>
+              <Label className="text-[10px] font-bold uppercase text-muted-foreground mb-1 block">
+                Auto-Lock Timeout
+              </Label>
               <select
-                value={priority}
-                onChange={(e) => setPriority(e.target.value as TaskPriority)}
-                className="w-full h-9 px-2 rounded-md bg-background border border-input text-xs"
+                value={timeoutDuration}
+                onChange={(e) => setTimeoutDuration(Number(e.target.value) as TimeoutDuration)}
+                className="w-full h-9 px-2.5 rounded-xl border border-input bg-background text-xs shadow-sm outline-none"
               >
-                {PRIORITIES.map((p) => (
-                  <option key={p.id} value={p.id}>{p.label}</option>
-                ))}
+                <option value={60000}>1 Minute</option>
+                <option value={300000}>5 Minutes (Default)</option>
+                <option value={900000}>15 Minutes</option>
+                <option value={3600000}>1 Hour</option>
+                <option value={0}>Never Auto-Lock</option>
               </select>
             </div>
           </div>
-          <div className="pt-2 flex justify-end gap-2 border-t border-border">
-            <Button type="button" variant="secondary" size="sm" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" size="sm" className="font-bold">
-              Save Changes
-            </Button>
-          </div>
+
+          <Button
+            type="submit"
+            disabled={newCode.trim().length < 4}
+            className="rounded-xl font-bold text-xs cursor-pointer h-9 px-4"
+          >
+            Enable Passcode & Timeout
+          </Button>
         </form>
-      </DialogContent>
-    </Dialog>
+      ) : (
+        <div className="space-y-4 pt-1">
+          {/* Active status bar */}
+          <div className="flex items-center justify-between bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/20 text-xs">
+            <span className="font-bold text-emerald-600 dark:text-emerald-400">
+              Passcode lock is active
+            </span>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setIsChanging((v) => !v);
+                  setIsRemoving(false);
+                  setErrorMsg("");
+                }}
+                className="h-7 text-xs rounded-lg cursor-pointer"
+              >
+                Change Code
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => {
+                  setIsRemoving((v) => !v);
+                  setIsChanging(false);
+                  setErrorMsg("");
+                }}
+                className="h-7 text-xs rounded-lg cursor-pointer"
+              >
+                Remove
+              </Button>
+            </div>
+          </div>
+
+          {/* Change Passcode inline panel */}
+          {isChanging && (
+            <form onSubmit={handleChange} className="p-3 bg-muted/40 rounded-xl border border-border space-y-2 text-xs">
+              <div className="font-semibold text-foreground flex items-center gap-1.5">
+                <KeyRound className="w-3.5 h-3.5 text-primary" />
+                Change Passcode
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Input
+                  type="password"
+                  placeholder="Current code"
+                  value={currentCode}
+                  onChange={(e) => setCurrentCode(e.target.value)}
+                  className="w-36 h-8 text-xs font-mono"
+                  autoFocus
+                />
+                <Input
+                  type="password"
+                  placeholder="New code (4+ digits)"
+                  value={nextCode}
+                  onChange={(e) => setNextCode(e.target.value)}
+                  className="w-36 h-8 text-xs font-mono"
+                />
+                <Button type="submit" size="sm" className="h-8 text-xs rounded-lg font-bold">
+                  Save
+                </Button>
+              </div>
+              {errorMsg && <p className="text-[11px] text-destructive font-semibold">{errorMsg}</p>}
+            </form>
+          )}
+
+          {/* Remove Passcode inline panel */}
+          {isRemoving && (
+            <form onSubmit={handleRemove} className="p-3 bg-destructive/5 rounded-xl border border-destructive/20 space-y-2 text-xs">
+              <div className="font-semibold text-destructive">Confirm Passcode Removal</div>
+              <div className="flex flex-wrap gap-2">
+                <Input
+                  type="password"
+                  placeholder="Verify passcode"
+                  value={removeVerifyCode}
+                  onChange={(e) => setRemoveVerifyCode(e.target.value)}
+                  className="w-40 h-8 text-xs font-mono"
+                  autoFocus
+                />
+                <Button type="submit" variant="destructive" size="sm" className="h-8 text-xs rounded-lg font-bold">
+                  Confirm Remove
+                </Button>
+              </div>
+              {errorMsg && <p className="text-[11px] text-destructive font-semibold">{errorMsg}</p>}
+            </form>
+          )}
+
+          {/* Controls: Timeout & Tab Switch */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1 border-t border-border/40">
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-muted-foreground uppercase">
+                Auto-Lock Inactivity Timeout
+              </label>
+              <select
+                value={timeoutDuration}
+                onChange={(e) => setTimeoutDuration(Number(e.target.value) as TimeoutDuration)}
+                className="w-full h-9 px-2.5 rounded-xl border border-input bg-background text-xs shadow-sm outline-none"
+              >
+                <option value={60000}>1 Minute</option>
+                <option value={300000}>5 Minutes</option>
+                <option value={900000}>15 Minutes</option>
+                <option value={3600000}>1 Hour</option>
+                <option value={0}>Never Auto-Lock</option>
+              </select>
+            </div>
+
+            <div className="flex items-center gap-2.5 sm:mt-5">
+              <Checkbox
+                id="tabSwitch"
+                checked={lockOnTabSwitch}
+                onCheckedChange={(c) => setLockOnTabSwitch(Boolean(c))}
+              />
+              <Label htmlFor="tabSwitch" className="text-xs cursor-pointer font-medium leading-tight">
+                Lock immediately when switching browser tabs or minimizing
+              </Label>
+            </div>
+          </div>
+        </div>
+      )}
+    </Card>
   );
-}
-</file>
-
-<file path="src/pages/Tasks/useTasks.ts">
-import { useCallback, useEffect, useMemo, useRef } from "react";
-import { createId } from "@/lib/id";
-import { useWorkspaceStore, selectTodos } from "@/stores/workspaceStore";
-import { addDays, getTodayDate, getWeekEnd, getWeekStart } from "@/lib/date";
-import type { TodoItem, TaskPriority } from "@/types/workspace";
-
-function isNotificationSupported(): boolean {
-  return typeof window !== "undefined" && "Notification" in window;
-}
-
-export async function ensureReminderPermission(): Promise<
-  NotificationPermission | "unsupported"
-> {
-  if (!isNotificationSupported()) {
-    return "unsupported";
-  }
-
-  if (
-    Notification.permission === "granted" ||
-    Notification.permission === "denied"
-  ) {
-    return Notification.permission;
-  }
-
-  try {
-    return await Notification.requestPermission();
-  } catch {
-    return "denied";
-  }
-}
-
-export type TodoCreateInput = {
-  text: string;
-  dueDate?: string;
-  dueTime?: string;
-  reminder?: boolean;
-  priority?: TaskPriority;
-};
-
-export type TodoPatch = Partial<
-  Pick<
-    TodoItem,
-    | "text"
-    | "dueDate"
-    | "dueTime"
-    | "reminder"
-    | "priority"
-    | "done"
-  >
->;
-
-export function useTasks() {
-  const todos = useWorkspaceStore(selectTodos);
-  const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
-  const timersRef = useRef<Map<string, number>>(new Map());
-  const triggeredIdsRef = useRef<Set<string>>(new Set());
-
-  const today = getTodayDate();
-  const weekStart = getWeekStart();
-  const weekEnd = getWeekEnd();
-
-  const clearTimer = useCallback((id: string) => {
-    const existing = timersRef.current.get(id);
-    if (existing !== undefined) {
-      window.clearTimeout(existing);
-      timersRef.current.delete(id);
-    }
-  }, []);
-
-  const clearAllTimers = useCallback(() => {
-    timersRef.current.forEach((timerId) => window.clearTimeout(timerId));
-    timersRef.current.clear();
-  }, []);
-
-  const fireNotification = useCallback(async (task: TodoItem) => {
-    if (!isNotificationSupported() || Notification.permission !== "granted") {
-      return;
-    }
-
-    if (triggeredIdsRef.current.has(task.id)) {
-      return;
-    }
-    triggeredIdsRef.current.add(task.id);
-
-    const title = task.text;
-    const options: NotificationOptions = {
-      body: `Reminder due at ${task.dueTime || "09:00"}`,
-      icon: "/favicon.svg",
-      badge: "/favicon.svg",
-      tag: `todo-reminder-${task.id}`,
-    };
-
-    if ("serviceWorker" in navigator) {
-      try {
-        const registration = await navigator.serviceWorker.ready;
-        await registration.showNotification(title, options);
-        return;
-      } catch {
-        // Fallback below
-      }
-    }
-
-    try {
-      new Notification(title, options);
-    } catch {
-      // Suppressed
-    }
-  }, []);
-
-  const scheduleTimer = useCallback(
-    (task: TodoItem) => {
-      clearTimer(task.id);
-
-      if (!task.reminder || !task.dueDate || task.done) {
-        return;
-      }
-
-      if (!isNotificationSupported() || Notification.permission !== "granted") {
-        return;
-      }
-
-      const targetDate = new Date(`${task.dueDate}T${task.dueTime || "09:00"}`);
-      const delay = targetDate.getTime() - Date.now();
-
-      if (delay <= 0 && delay > -60000) {
-        void fireNotification(task);
-        return;
-      }
-
-      if (delay > 0 && delay <= 2147483647) {
-        const timerId = window.setTimeout(() => {
-          void fireNotification(task);
-          timersRef.current.delete(task.id);
-        }, delay);
-
-        timersRef.current.set(task.id, timerId);
-      }
-    },
-    [clearTimer, fireNotification],
-  );
-
-  const add = useCallback(
-    (input: TodoCreateInput) => {
-      const trimmedText = input.text.trim();
-      if (!trimmedText) return;
-
-      const todo: TodoItem = {
-        id: createId("todo"),
-        text: trimmedText,
-        done: false,
-        date: getTodayDate(),
-        dueDate: input.dueDate ?? getTodayDate(),
-        dueTime: input.dueTime,
-        reminder: Boolean(input.reminder),
-        priority: input.priority,
-      };
-
-      setWorkspace((prev) => ({
-        ...prev,
-        todos: [...prev.todos, todo],
-      }));
-
-      if (todo.reminder) {
-        scheduleTimer(todo);
-      }
-    },
-    [setWorkspace, scheduleTimer],
-  );
-
-  const update = useCallback(
-    (id: string, patch: TodoPatch) => {
-      const current = useWorkspaceStore
-        .getState()
-        .workspace.todos.find((t) => t.id === id);
-
-      if (!current) return;
-
-      const updated: TodoItem = {
-        ...current,
-        ...patch,
-        id,
-      };
-
-      if (patch.reminder || patch.dueDate || patch.dueTime) {
-        triggeredIdsRef.current.delete(id);
-      }
-
-      setWorkspace((prev) => ({
-        ...prev,
-        todos: prev.todos.map((t) => (t.id === id ? updated : t)),
-      }));
-
-      if (updated.done || !updated.reminder) {
-        clearTimer(id);
-      } else {
-        scheduleTimer(updated);
-      }
-    },
-    [setWorkspace, clearTimer, scheduleTimer],
-  );
-
-  const toggle = useCallback(
-    (id: string) => {
-      setWorkspace((prev) => ({
-        ...prev,
-        todos: prev.todos.map((t) => {
-          if (t.id !== id) return t;
-          const next: TodoItem = {
-            ...t,
-            done: !t.done,
-            date: getTodayDate(),
-          };
-
-          if (next.done) {
-            clearTimer(id);
-          } else if (next.reminder) {
-            triggeredIdsRef.current.delete(id);
-            scheduleTimer(next);
-          }
-
-          return next;
-        }),
-      }));
-    },
-    [setWorkspace, clearTimer, scheduleTimer],
-  );
-
-  const remove = useCallback(
-    (id: string) => {
-      clearTimer(id);
-      triggeredIdsRef.current.delete(id);
-      setWorkspace((prev) => ({
-        ...prev,
-        todos: prev.todos.filter((t) => t.id !== id),
-      }));
-    },
-    [setWorkspace, clearTimer],
-  );
-
-  const moveToNextWeek = useCallback(
-    (id: string) => {
-      setWorkspace((prev) => ({
-        ...prev,
-        todos: prev.todos.map((t) => {
-          if (t.id !== id) return t;
-          const nextWeekStart = addDays(weekEnd, 1);
-          return {
-            ...t,
-            dueDate: nextWeekStart,
-          };
-        }),
-      }));
-    },
-    [setWorkspace, weekEnd],
-  );
-
-  const moveToThisWeek = useCallback(
-    (id: string) => {
-      setWorkspace((prev) => ({
-        ...prev,
-        todos: prev.todos.map((t) => {
-          if (t.id !== id) return t;
-          return {
-            ...t,
-            dueDate: getTodayDate(),
-          };
-        }),
-      }));
-    },
-    [setWorkspace],
-  );
-
-  // Split tasks by current calendar week bounds
-  const { thisWeek, nextWeek } = useMemo(() => {
-    const thisList: TodoItem[] = [];
-    const nextList: TodoItem[] = [];
-
-    todos.forEach((todo) => {
-      // Anything due on or before Sunday of this week belongs to This Week
-      if (!todo.dueDate || todo.dueDate <= weekEnd) {
-        thisList.push(todo);
-      } else {
-        nextList.push(todo);
-      }
-    });
-
-    const sortTasks = (list: TodoItem[]): TodoItem[] =>
-      [...list].sort((a, b) => Number(a.done) - Number(b.done));
-
-    return {
-      thisWeek: sortTasks(thisList),
-      nextWeek: sortTasks(nextList),
-    };
-  }, [todos, weekEnd]);
-
-  // Clean rollover: incomplete tasks from prior to this week roll forward to TODAY
-  useEffect(() => {
-    let needsRollover = false;
-    const currentToday = getTodayDate();
-
-    const rolled = todos.map((todo) => {
-      if (todo.done) return todo;
-      const due = todo.dueDate ?? todo.date;
-      // Overdue tasks from before this week get brought forward to Today
-      if (due && due < weekStart) {
-        needsRollover = true;
-        return {
-          ...todo,
-          dueDate: currentToday,
-        };
-      }
-      return todo;
-    });
-
-    if (needsRollover) {
-      setWorkspace((prev) => ({
-        ...prev,
-        todos: rolled,
-      }));
-      return;
-    }
-
-    todos.forEach((todo) => {
-      if (todo.reminder && !todo.done) {
-        scheduleTimer(todo);
-      }
-    });
-
-    const interval = window.setInterval(() => {
-      todos.forEach((todo) => {
-        if (todo.reminder && !todo.done && todo.dueDate) {
-          const target = new Date(`${todo.dueDate}T${todo.dueTime || "09:00"}`).getTime();
-          const diff = target - Date.now();
-          if (diff <= 0 && diff > -120000 && !triggeredIdsRef.current.has(todo.id)) {
-            void fireNotification(todo);
-          }
-        }
-      });
-    }, 20000);
-
-    return () => {
-      window.clearInterval(interval);
-      clearAllTimers();
-    };
-  }, [todos, setWorkspace, scheduleTimer, clearAllTimers, fireNotification, weekStart]);
-
-  return {
-    thisWeek,
-    nextWeek,
-    add,
-    update,
-    toggle,
-    remove,
-    moveToNextWeek,
-    moveToThisWeek,
-  };
 }
 </file>
 
@@ -3266,6 +2637,41 @@ export function RouteErrorPage() {
       </div>
     </main>
   );
+}
+</file>
+
+<file path="src/services/backup/schema.ts">
+import type { Workspace } from "@/types/workspace";
+import { normalizeWorkspace } from "@/services/firebase/workspace";
+
+export const CURRENT_BACKUP_VERSION = 3;
+
+export interface BackupEnvelope {
+  app: string;
+  version: number;
+  exportedAt: string;
+  deviceInfo?: string;
+  workspace: Workspace;
+}
+
+export function migrateBackupPayload(raw: unknown): Workspace {
+  if (!raw || typeof raw !== "object") {
+    throw new Error("Invalid file content: Expected a JSON object.");
+  }
+
+  const obj = raw as Record<string, unknown>;
+
+  // Check if it's wrapped in an envelope
+  if ("workspace" in obj && obj.workspace && typeof obj.workspace === "object") {
+    return normalizeWorkspace(obj.workspace as Partial<Workspace>);
+  }
+
+  // Handle direct raw workspace export
+  if ("columns" in obj || "links" in obj || "todos" in obj || "reports" in obj) {
+    return normalizeWorkspace(obj as Partial<Workspace>);
+  }
+
+  throw new Error("Unrecognized backup format. Ensure this is a Reset Launchpad backup file.");
 }
 </file>
 
@@ -3367,6 +2773,121 @@ export const FIREBASE_CONFIG: FirebaseOptions = {
 };
 
 export const APP_ID = env.VITE_APP_ID ?? "reset-launchpad-app";
+</file>
+
+<file path="src/services/notifications.ts">
+import { playReminderChime } from "@/lib/audio";
+import type { TodoItem } from "@/types/workspace";
+
+export function isNotificationSupported(): boolean {
+  return typeof window !== "undefined" && "Notification" in window;
+}
+
+export async function requestNotificationPermission(): Promise<
+  NotificationPermission | "unsupported"
+> {
+  if (!isNotificationSupported()) return "unsupported";
+  try {
+    return await Notification.requestPermission();
+  } catch {
+    return "denied";
+  }
+}
+
+export async function dispatchTaskNotification(task: TodoItem): Promise<void> {
+  if (task.audioAlert !== false) {
+    playReminderChime();
+  }
+
+  if (!isNotificationSupported() || Notification.permission !== "granted") {
+    return;
+  }
+
+  const title = `Task Reminder: ${task.text}`;
+  const options: NotificationOptions = {
+    body: task.dueTime
+      ? `Scheduled for ${task.dueTime} (Offset: ${task.reminderOffset || 0}m)`
+      : "Your scheduled task deadline is now.",
+    icon: "/favicon.svg",
+    badge: "/favicon.svg",
+    tag: `task-reminder-${task.id}`,
+  };
+
+  if ("serviceWorker" in navigator) {
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      await reg.showNotification(title, options);
+      return;
+    } catch {
+      // Fallback below
+    }
+  }
+
+  try {
+    new Notification(title, options);
+  } catch {
+    // Suppressed
+  }
+}
+</file>
+
+<file path="src/services/useReminderEngine.ts">
+import { useEffect, useRef } from "react";
+import { useWorkspaceStore } from "@/stores/workspaceStore";
+import { dispatchTaskNotification } from "@/services/notifications";
+
+export function useReminderEngine() {
+  const todos = useWorkspaceStore((s) => s.workspace.todos);
+  const setTodos = useWorkspaceStore((s) => s.setTodos);
+  const activeIdsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    const checkReminders = () => {
+      const now = Date.now();
+
+      todos.forEach((task) => {
+        if (!task.reminder || task.done || task.reminderStatus === "dismissed") {
+          return;
+        }
+
+        if (!task.dueDate) return;
+
+        const timeStr = task.dueTime || "09:00";
+        const targetDate = new Date(`${task.dueDate}T${timeStr}:00`);
+        const targetTimestamp = targetDate.getTime();
+        if (Number.isNaN(targetTimestamp)) return;
+
+        const offsetMs = (task.reminderOffset || 0) * 60 * 1000;
+        const triggerTime = targetTimestamp - offsetMs;
+        const diff = triggerTime - now;
+
+        // Fire if due within the current 15s window or overdue by less than 5 minutes
+        if (
+          diff <= 15000 &&
+          diff > -300000 &&
+          !activeIdsRef.current.has(task.id) &&
+          task.reminderStatus !== "triggered"
+        ) {
+          activeIdsRef.current.add(task.id);
+          void dispatchTaskNotification(task);
+
+          setTodos((prevList) =>
+            prevList.map((t) =>
+              t.id === task.id ? { ...t, reminderStatus: "triggered" } : t
+            )
+          );
+        }
+      });
+    };
+
+    checkReminders();
+    const interval = window.setInterval(checkReminders, 15000);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [todos, setTodos]);
+}
 </file>
 
 <file path="src/shared/api/errors.ts">
@@ -3996,11 +3517,67 @@ directory = "./dist"
 not_found_handling = "single-page-application"
 </file>
 
-<file path="src/components/auth/AuthGuard.tsx">
-import { type ReactNode } from "react";
+<file path="src/components/auth/useAuth.ts">
+import { useState } from "react";
+import { signInWithGoogle, signOutCurrent } from "@/services/firebase/auth";
+import { toAppError } from "@/shared/api/errors";
+import { useWorkspaceStore } from "@/stores/workspaceStore";
+import type { AppUser } from "@/types/auth";
 
-export function AuthGuard({ children }: { children: ReactNode }) {
-  return <>{children}</>;
+const LOCAL_USER_KEY = "launchpad_is_local_user";
+const LOCAL_USER_PROFILE: AppUser = {
+  uid: "local",
+  email: "local@launchpad",
+  displayName: "Local User",
+  photoURL: null,
+};
+
+export function useAuth() {
+  const setUser = useWorkspaceStore((state) => state.setUser);
+  const user = useWorkspaceStore((state) => state.user);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [authBusy, setAuthBusy] = useState(false);
+
+  const login = async () => {
+    setAuthError(null);
+    setAuthBusy(true);
+    try {
+      try {
+        localStorage.removeItem(LOCAL_USER_KEY);
+      } catch {}
+      await signInWithGoogle();
+    } catch (error) {
+      setAuthError(toAppError(error).message);
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const loginLocal = () => {
+    setAuthError(null);
+    try {
+      localStorage.setItem(LOCAL_USER_KEY, "true");
+    } catch {}
+    setUser(LOCAL_USER_PROFILE);
+  };
+
+  const logout = async () => {
+    setAuthError(null);
+    try {
+      localStorage.removeItem(LOCAL_USER_KEY);
+    } catch {}
+    try {
+      await signOutCurrent();
+    } catch (error) {
+      if (user && user.uid !== "local") {
+        setAuthError(toAppError(error).message);
+        return;
+      }
+    }
+    setUser(null);
+  };
+
+  return { user, authError, authBusy, login, loginLocal, logout };
 }
 </file>
 
@@ -4166,6 +3743,201 @@ export function DashboardPage() {
       {activeTab === "reports" && <ReportsPage />}
       {activeTab === "launchpad" && <LaunchpadPage searchTerm={search} />}
     </main>
+  );
+}
+</file>
+
+<file path="src/pages/Notes/index.tsx">
+import { useState, useMemo } from "react";
+import { Edit3, FileText, Pin, Plus, Trash2, Eye } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { useNotes } from "./useNotes";
+import { NoteModal } from "./NoteModal";
+import { NoteViewModal } from "./NoteViewModal";
+import { cn } from "@/lib/utils";
+import type { NoteItem } from "./notes.types";
+
+const NOTE_COLORS: Record<string, { bg: string; border: string }> = {
+  default: { bg: "bg-card/80", border: "border-border" },
+  amber: { bg: "bg-amber-500/10", border: "border-amber-500/30" },
+  emerald: { bg: "bg-emerald-500/10", border: "border-emerald-500/30" },
+  violet: { bg: "bg-violet-500/10", border: "border-violet-500/30" },
+  rose: { bg: "bg-rose-500/10", border: "border-rose-500/30" },
+  blue: { bg: "bg-blue-500/10", border: "border-blue-500/30" },
+};
+
+export function NotesPage({ searchTerm = "" }: { searchTerm?: string }) {
+  const { notes, addNote, updateNote, togglePin, removeNote } = useNotes();
+  const { confirm, ConfirmDialogElement } = useConfirmDialog();
+
+  const [modalOpen, setModalOpen] = useState(false);
+  const [viewModalOpen, setViewModalOpen] = useState(false);
+  const [activeNote, setActiveNote] = useState<NoteItem | null>(null);
+
+  const filteredNotes = useMemo(() => {
+    const q = searchTerm.toLowerCase().trim();
+    if (!q) return notes;
+    return notes.filter(
+      (n) => n.title.toLowerCase().includes(q) || n.content.toLowerCase().includes(q),
+    );
+  }, [notes, searchTerm]);
+
+  const handleOpenAdd = () => {
+    setActiveNote(null);
+    setModalOpen(true);
+  };
+
+  const handleOpenEdit = (note: NoteItem) => {
+    setActiveNote(note);
+    setModalOpen(true);
+  };
+
+  const handleOpenView = (note: NoteItem) => {
+    setActiveNote(note);
+    setViewModalOpen(true);
+  };
+
+  const handleDelete = async (note: NoteItem) => {
+    const ok = await confirm(`Permanently delete note "${note.title}"?`);
+    if (ok) {
+      removeNote(note.id);
+    }
+  };
+
+  const handleSave = (payload: { title: string; content: string; color: NoteItem["color"] }) => {
+    if (activeNote) {
+      updateNote(activeNote.id, payload);
+    } else {
+      addNote(payload);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold">
+            <FileText className="h-4 w-4" />
+          </div>
+          <div>
+            <h2 className="font-bold text-sm text-foreground">Scratchpad & Notes</h2>
+            <p className="text-[11px] text-muted-foreground">
+              {filteredNotes.length} {filteredNotes.length === 1 ? "note" : "notes"} recorded
+            </p>
+          </div>
+        </div>
+
+        <Button size="sm" onClick={handleOpenAdd} className="rounded-xl font-bold text-xs">
+          <Plus className="h-3.5 w-3.5 mr-1" /> New Note
+        </Button>
+      </div>
+
+      {filteredNotes.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-border bg-card/50 p-12 text-center flex flex-col items-center gap-2">
+          <FileText className="h-8 w-8 text-muted-foreground/40 mb-1" />
+          <div className="text-sm font-semibold">No notes found</div>
+          <p className="text-xs text-muted-foreground max-w-sm">
+            {searchTerm ? "No notes match your search query." : "Capture ideas or scratchpad notes anytime."}
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+          {filteredNotes.map((note) => {
+            const color = NOTE_COLORS[note.color ?? "default"] ?? NOTE_COLORS.default;
+
+            return (
+              <div
+                key={note.id}
+                className={cn(
+                  "group relative rounded-2xl border p-4 flex flex-col justify-between transition-all shadow-sm cursor-pointer hover:border-primary/50",
+                  color.bg,
+                  color.border,
+                )}
+                onClick={() => handleOpenView(note)}
+              >
+                <div>
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <h3 className="font-bold text-sm text-foreground leading-snug line-clamp-2">
+                      {note.title}
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        togglePin(note.id);
+                      }}
+                      className={cn(
+                        "p-1 rounded-lg transition-colors flex-shrink-0 cursor-pointer",
+                        note.pinned ? "text-primary hover:text-primary/80" : "text-muted-foreground/50 hover:text-foreground",
+                      )}
+                      title={note.pinned ? "Unpin note" : "Pin note"}
+                    >
+                      <Pin className="h-3.5 w-3.5" fill={note.pinned ? "currentColor" : "none"} />
+                    </button>
+                  </div>
+
+                  <p className="text-xs text-muted-foreground whitespace-pre-wrap leading-relaxed line-clamp-5">
+                    {note.content}
+                  </p>
+                </div>
+
+                <div 
+                  className="pt-3 flex items-center justify-between border-t border-border/50 mt-4 text-[10px] text-muted-foreground"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <span>{new Date(note.updatedAt).toLocaleDateString()}</span>
+
+                  {/* Safely separated Action buttons */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenView(note)}
+                      className="px-2 py-1 rounded-md bg-muted/80 hover:bg-muted text-foreground transition-colors flex items-center gap-1 font-medium"
+                      title="View Note"
+                    >
+                      <Eye className="h-3 w-3 text-muted-foreground" />
+                      <span>View</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEdit(note)}
+                      className="px-2 py-1 rounded-md bg-muted/80 hover:bg-muted text-foreground transition-colors flex items-center gap-1 font-medium"
+                      title="Edit Note"
+                    >
+                      <Edit3 className="h-3 w-3 text-muted-foreground" />
+                      <span>Edit</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(note)}
+                      className="p-1 rounded-md text-destructive/70 hover:text-destructive hover:bg-destructive/10 transition-colors ml-1"
+                      title="Delete Note"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <NoteModal
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+        note={activeNote}
+        onSave={handleSave}
+      />
+      <NoteViewModal
+        open={viewModalOpen}
+        onOpenChange={setViewModalOpen}
+        note={activeNote}
+        onEdit={handleOpenEdit}
+      />
+      {ConfirmDialogElement}
+    </div>
   );
 }
 </file>
@@ -4450,72 +4222,1265 @@ export function ReportSummaryCards({ reports }: Props) {
 }
 </file>
 
-<file path="src/pages/Settings/useBackup.ts">
-import { type ChangeEvent } from "react";
+<file path="src/pages/Settings/index.tsx">
+import { Link } from "react-router-dom";
+import { ArrowLeft, Download, Upload, CheckCircle2 } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { useBackup } from "./useBackup";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
-import { normalizeWorkspace } from "@/services/firebase/workspace";
-import type { Workspace } from "@/types/workspace";
+import { SecuritySettings } from "./SecuritySettings";
 
-export function useBackup() {
-  const workspace = useWorkspaceStore((state) => state.workspace);
-  const setWorkspace = useWorkspaceStore((state) => state.setWorkspace);
+export function SettingsPage() {
+  const {
+    exportBackup,
+    triggerImportClick,
+    handleFileSelected,
+    fileInputRef,
+    isProcessing,
+    statusMessage,
+  } = useBackup();
 
-  const exportBackup = () => {
-    const payload = {
-      version: 2,
-      exportedAt: new Date().toISOString(),
-      workspace: {
-        settings: workspace.settings,
-        columns: workspace.columns,
-        links: workspace.links,
-        todos: workspace.todos || [],
-        notes: workspace.notes || [],
-        reports: workspace.reports || [],
-      },
-    };
+  const user = useWorkspaceStore((s) => s.user);
+  const folderCount = useWorkspaceStore((s) => s.workspace.columns.length);
+  const linkCount = useWorkspaceStore((s) => s.workspace.links.length);
+  const todoCount = useWorkspaceStore((s) => s.workspace.todos.length);
+  const noteCount = useWorkspaceStore((s) => s.workspace.notes?.length ?? 0);
+  const reportCount = useWorkspaceStore((s) => s.workspace.reports?.length ?? 0);
 
-    const blob = new Blob([JSON.stringify(payload, null, 2)], {
-      type: "application/json",
+  return (
+    <main className="flex-1 max-w-3xl mx-auto w-full p-4 sm:p-6 flex flex-col gap-6 pb-20 lg:pb-8">
+      <header className="flex items-center justify-between gap-4">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <Button asChild variant="ghost" size="icon" className="h-8 w-8 rounded-lg cursor-pointer">
+              <Link to="/dashboard" aria-label="Back to Dashboard">
+                <ArrowLeft className="h-4 w-4" />
+              </Link>
+            </Button>
+            <h1 className="text-lg font-semibold tracking-tight">Settings & Security</h1>
+          </div>
+          <p className="text-xs text-muted-foreground ml-10">
+            Signed in as {user?.email ?? "anonymous"}
+          </p>
+        </div>
+      </header>
+
+      <SecuritySettings />
+
+      <Card className="p-5 space-y-3">
+        <h2 className="font-medium text-sm">Workspace Overview</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-center">
+          <Stat label="Folders" value={folderCount} />
+          <Stat label="Links" value={linkCount} />
+          <Stat label="Todos" value={todoCount} />
+          <Stat label="Notes" value={noteCount} />
+          <Stat label="Gym Reports" value={reportCount} highlight />
+        </div>
+      </Card>
+
+      <Card className="p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="font-medium text-sm">Backup & Restore Pipeline</h2>
+            <p className="text-xs text-muted-foreground">
+              Direct JSON file sync compatible with your Google Drive backup folder.
+            </p>
+          </div>
+          {statusMessage && (
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-500 bg-emerald-500/10 px-2.5 py-1 rounded-lg">
+              <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate max-w-[200px] sm:max-w-xs">{statusMessage}</span>
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-wrap gap-2 pt-2">
+          <Button
+            type="button"
+            onClick={exportBackup}
+            disabled={isProcessing}
+            variant="default"
+            className="cursor-pointer font-bold text-xs rounded-xl h-9"
+          >
+            <Download className="h-3.5 w-3.5 mr-1.5" />
+            Export Complete Backup
+          </Button>
+
+          <Button
+            type="button"
+            onClick={triggerImportClick}
+            disabled={isProcessing}
+            variant="secondary"
+            className="cursor-pointer font-bold text-xs rounded-xl h-9 border border-border"
+          >
+            <Upload className="h-3.5 w-3.5 mr-1.5" />
+            Restore from Drive / File
+          </Button>
+
+          {/* Hidden input triggered directly by ref */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,application/json"
+            onChange={handleFileSelected}
+            className="hidden"
+          />
+        </div>
+      </Card>
+    </main>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  highlight = false,
+}: {
+  label: string;
+  value: number;
+  highlight?: boolean;
+}) {
+  return (
+    <div
+      className={`rounded-xl bg-muted/60 border ${
+        highlight ? "border-primary/40 bg-primary/5" : "border-border"
+      } p-3 transition-colors`}
+    >
+      <div className={`text-xl font-bold ${highlight ? "text-primary" : "text-foreground"}`}>
+        {value}
+      </div>
+      <div className="text-[10px] uppercase font-bold text-muted-foreground mt-0.5 tracking-wider">
+        {label}
+      </div>
+    </div>
+  );
+}
+</file>
+
+<file path="src/pages/Tasks/index.tsx">
+import { useState, useMemo, type FormEvent } from "react";
+import { 
+  ArrowLeft, 
+  ArrowRight, 
+  Calendar, 
+  Check, 
+  CheckCircle2, 
+  ListTodo, 
+  Pencil, 
+  Plus, 
+  Trash2, 
+  FileText, 
+  Pin, 
+  Edit3,
+  Bell,
+  Eye,
+  Clock
+} from "lucide-react";
+import { useTasks } from "./useTasks";
+import { useNotes } from "@/pages/Notes/useNotes";
+import { NoteModal } from "@/pages/Notes/NoteModal";
+import { NoteViewModal } from "@/pages/Notes/NoteViewModal";
+import { useConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { formatDateLabel, getTodayDate, addDays, getWeekStart, getWeekEnd, formatWeekday } from "@/lib/date";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { TaskModal } from "./TaskModal";
+import { cn } from "@/lib/utils";
+import type { TaskPriority, TodoItem } from "@/types/workspace";
+import type { NoteItem } from "@/pages/Notes/notes.types";
+
+type ViewMode = "today" | "thisWeek" | "nextWeek";
+
+const PRIORITIES: { id: TaskPriority; label: string; activeStyle: string }[] = [
+  { id: "low", label: "Low", activeStyle: "bg-emerald-500 text-white font-bold" },
+  { id: "medium", label: "Med", activeStyle: "bg-amber-500 text-slate-950 font-bold" },
+  { id: "high", label: "High", activeStyle: "bg-rose-500 text-white font-bold" },
+];
+
+const NOTE_COLORS: Record<string, { bg: string; border: string }> = {
+  default: { bg: "bg-card/80", border: "border-border" },
+  amber: { bg: "bg-amber-500/10", border: "border-amber-500/30" },
+  emerald: { bg: "bg-emerald-500/10", border: "border-emerald-500/30" },
+  violet: { bg: "bg-violet-500/10", border: "border-violet-500/30" },
+  rose: { bg: "bg-rose-500/10", border: "border-rose-500/30" },
+  blue: { bg: "bg-blue-500/10", border: "border-blue-500/30" },
+};
+
+export function TasksPage({ searchTerm = "" }: { searchTerm?: string }) {
+  const {
+    thisWeek,
+    nextWeek,
+    add,
+    update,
+    toggle,
+    remove,
+    moveToNextWeek,
+    moveToThisWeek,
+  } = useTasks();
+
+  const { notes, addNote, updateNote, togglePin, removeNote } = useNotes();
+  const { confirm, ConfirmDialogElement } = useConfirmDialog();
+
+  const today = getTodayDate();
+  const weekStart = getWeekStart();
+  const weekEnd = getWeekEnd();
+
+  const [mode, setMode] = useState<ViewMode>("today");
+  const [draft, setDraft] = useState("");
+  const [priority, setPriority] = useState<TaskPriority>("medium");
+  const [editingTask, setEditingTask] = useState<TodoItem | null>(null);
+
+  // Quick Input Reminder fields
+  const [showReminderOptions, setShowReminderOptions] = useState(false);
+  const [quickTime, setQuickTime] = useState("09:00");
+  const [quickReminder, setQuickReminder] = useState(false);
+
+  // Notes Modal state
+  const [noteModalOpen, setNoteModalOpen] = useState(false);
+  const [noteViewOpen, setNoteViewOpen] = useState(false);
+  const [activeNote, setActiveNote] = useState<NoteItem | null>(null);
+
+  const dateBadge = useMemo(() => {
+    if (mode === "today") return formatDateLabel();
+    if (mode === "thisWeek") return `${formatWeekday(weekStart)} – ${formatWeekday(weekEnd)}`;
+    const nextStart = addDays(weekEnd, 1);
+    const nextEnd = addDays(weekEnd, 7);
+    return `${formatWeekday(nextStart)} – ${formatWeekday(nextEnd)}`;
+  }, [mode, weekStart, weekEnd]);
+
+  const activeTasks = useMemo(() => {
+    let list: TodoItem[] = [];
+    if (mode === "today") {
+      list = thisWeek.filter((t) => !t.dueDate || t.dueDate <= today);
+    } else if (mode === "thisWeek") {
+      list = thisWeek;
+    } else {
+      list = nextWeek;
+    }
+
+    const q = searchTerm.toLowerCase().trim();
+    if (!q) return list;
+    return list.filter((t) => t.text.toLowerCase().includes(q));
+  }, [mode, thisWeek, nextWeek, today, searchTerm]);
+
+  const filteredNotes = useMemo(() => {
+    const q = searchTerm.toLowerCase().trim();
+    if (!q) return notes;
+    return notes.filter((n) => n.title.toLowerCase().includes(q) || n.content.toLowerCase().includes(q));
+  }, [notes, searchTerm]);
+
+  const completedCount = activeTasks.filter((t) => t.done).length;
+  const totalCount = activeTasks.length;
+
+  const handleAddTask = (e: FormEvent) => {
+    e.preventDefault();
+    const trimmed = draft.trim();
+    if (!trimmed) return;
+
+    add({
+      text: trimmed,
+      dueDate: mode === "nextWeek" ? addDays(weekEnd, 1) : today,
+      dueTime: quickReminder ? quickTime : undefined,
+      reminder: quickReminder,
+      reminderOffset: 0,
+      audioAlert: true,
+      priority,
     });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `reset-launchpad-backup-${new Date().toISOString().slice(0, 10)}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+
+    setDraft("");
+    setQuickReminder(false);
+    setShowReminderOptions(false);
   };
 
-  const importBackup = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  const handleDeleteNote = async (note: NoteItem) => {
+    const ok = await confirm(`Permanently delete note "${note.title}"?`);
+    if (ok) {
+      removeNote(note.id);
+    }
+  };
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const raw = e.target?.result as string;
-        const parsed = JSON.parse(raw);
+  const handleSaveNote = (payload: { title: string; content: string; color: NoteItem["color"] }) => {
+    if (activeNote) {
+      updateNote(activeNote.id, payload);
+    } else {
+      addNote(payload);
+    }
+  };
 
-        const dataToImport = (parsed.workspace || parsed) as Partial<Workspace>;
+  return (
+    <div className="flex flex-col gap-5 max-w-6xl mx-auto w-full pb-16">
+      {/* Top Header Card */}
+      <div className="rounded-2xl border border-border bg-card/70 backdrop-blur-xl p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-primary/10 text-primary flex items-center justify-center font-bold flex-shrink-0">
+            {mode === "today" ? <Calendar className="h-5 w-5" /> : <ListTodo className="h-5 w-5" />}
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="font-bold text-sm text-foreground">
+                {mode === "today" ? "Today's Agenda" : mode === "thisWeek" ? "This Week" : "Next Week"}
+              </h2>
+              <span className="text-[11px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-semibold">
+                {dateBadge}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {totalCount === 0
+                ? "No tasks scheduled."
+                : `${completedCount} of ${totalCount} completed (${Math.round(
+                    (completedCount / (totalCount || 1)) * 100,
+                  )}%)`}
+            </p>
+          </div>
+        </div>
 
-        if (!dataToImport || typeof dataToImport !== "object") {
-          throw new Error("Invalid backup format");
-        }
+        <div className="flex rounded-xl bg-muted p-1 text-xs font-semibold gap-1 self-start sm:self-auto">
+          <button
+            type="button"
+            onClick={() => setMode("today")}
+            className={cn(
+              "px-3 py-1 rounded-lg transition-all cursor-pointer",
+              mode === "today" ? "bg-background text-foreground shadow-sm font-bold" : "text-muted-foreground",
+            )}
+          >
+            Today
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("thisWeek")}
+            className={cn(
+              "px-3 py-1 rounded-lg transition-all cursor-pointer",
+              mode === "thisWeek" ? "bg-background text-foreground shadow-sm font-bold" : "text-muted-foreground",
+            )}
+          >
+            This Week
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("nextWeek")}
+            className={cn(
+              "px-3 py-1 rounded-lg transition-all cursor-pointer",
+              mode === "nextWeek" ? "bg-background text-foreground shadow-sm font-bold" : "text-muted-foreground",
+            )}
+          >
+            Next Week
+          </button>
+        </div>
+      </div>
 
-        const normalized = normalizeWorkspace(dataToImport);
-        setWorkspace(normalized);
-        alert("Workspace backup restored successfully!");
-      } catch (err) {
-        console.error("Failed to restore backup:", err);
-        alert("Failed to restore backup. Please ensure the file is valid JSON.");
+      {/* 2-Column Responsive Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+        {/* Left Side: Tasks (7 cols) */}
+        <div className="lg:col-span-7 flex flex-col rounded-2xl border border-border bg-card/70 backdrop-blur-xl shadow-sm overflow-hidden">
+          <form onSubmit={handleAddTask} className="p-3 border-b border-border bg-background/50 flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <Input
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                placeholder={`Add task to ${mode === "today" ? "Today" : mode === "thisWeek" ? "This Week" : "Next Week"}...`}
+                className="h-10 bg-card border-border rounded-xl text-xs sm:text-sm font-medium focus-visible:ring-primary"
+              />
+              
+              {/* Priority Selectors */}
+              <div className="flex items-center gap-1">
+                {PRIORITIES.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setPriority(p.id)}
+                    className={cn(
+                      "px-2.5 py-1.5 rounded-lg text-[10px] font-semibold border transition-all cursor-pointer",
+                      priority === p.id ? p.activeStyle : "border-border bg-card text-muted-foreground",
+                    )}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Quick Reminder Toggle Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  setShowReminderOptions((prev) => !prev);
+                  if (!showReminderOptions) setQuickReminder(true);
+                }}
+                className={cn(
+                  "h-10 px-2.5 rounded-xl border flex items-center gap-1 text-xs transition-colors cursor-pointer shrink-0",
+                  quickReminder ? "bg-amber-500/10 border-amber-500/40 text-amber-500 font-bold" : "border-border bg-card text-muted-foreground hover:text-foreground"
+                )}
+                title="Configure reminder for this task"
+              >
+                <Bell className="h-4 w-4" />
+              </button>
+
+              <Button
+                type="submit"
+                size="sm"
+                disabled={!draft.trim()}
+                className="h-10 px-4 rounded-xl font-bold bg-primary text-primary-foreground shrink-0 shadow-sm cursor-pointer"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
+
+            {/* Quick Reminder Bar Drawer */}
+            {showReminderOptions && (
+              <div className="flex items-center justify-between p-2 rounded-xl bg-card border border-border text-xs animate-in fade-in-50">
+                <div className="flex items-center gap-2">
+                  <Clock className="h-3.5 w-3.5 text-primary" />
+                  <span className="font-semibold text-[11px]">Reminder Time:</span>
+                  <input
+                    type="time"
+                    value={quickTime}
+                    onChange={(e) => setQuickTime(e.target.value)}
+                    className="h-7 px-2 rounded-md bg-background border border-input text-xs font-mono"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-[11px] font-medium cursor-pointer flex items-center gap-1.5">
+                    <input
+                      type="checkbox"
+                      checked={quickReminder}
+                      onChange={(e) => setQuickReminder(e.target.checked)}
+                      className="rounded"
+                    />
+                    <span>Alarm Active</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowReminderOptions(false)}
+                    className="text-[10px] text-muted-foreground hover:text-foreground underline ml-2"
+                  >
+                    Hide
+                  </button>
+                </div>
+              </div>
+            )}
+          </form>
+
+          <ul className="p-3 space-y-2 max-h-[520px] overflow-y-auto">
+            {activeTasks.length === 0 ? (
+              <li className="py-12 text-center text-xs text-muted-foreground flex flex-col items-center gap-1">
+                <CheckCircle2 className="h-6 w-6 text-muted-foreground/30 mb-1" />
+                <span>No tasks in this view. Type above to add one.</span>
+              </li>
+            ) : (
+              activeTasks.map((task) => (
+                <li
+                  key={task.id}
+                  className={cn(
+                    "group flex items-center justify-between gap-3 p-2.5 rounded-xl border border-border bg-card/80 hover:border-primary/40 transition-all shadow-sm",
+                    task.done && "opacity-50 bg-muted/20 border-transparent",
+                  )}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <button
+                      type="button"
+                      onClick={() => toggle(task.id)}
+                      className={cn(
+                        "w-5 h-5 rounded-lg border flex items-center justify-center flex-shrink-0 transition-colors cursor-pointer",
+                        task.done
+                          ? "bg-emerald-500 border-emerald-500 text-white"
+                          : "border-muted-foreground/40 hover:border-primary bg-background",
+                      )}
+                    >
+                      {task.done && <Check className="h-3 w-3 stroke-[3]" />}
+                    </button>
+                    <div className="flex items-center gap-2 min-w-0 flex-1 truncate">
+                      <span
+                        className={cn(
+                          "text-xs sm:text-sm font-medium truncate",
+                          task.done ? "line-through text-muted-foreground" : "text-foreground",
+                        )}
+                      >
+                        {task.text}
+                      </span>
+                      {task.reminder && (
+                        <span
+                          className={cn(
+                            "flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md font-semibold shrink-0",
+                            task.reminderStatus === "triggered"
+                              ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                              : "bg-primary/10 text-primary"
+                          )}
+                          title={task.reminderOffset ? `${task.reminderOffset}m before` : "At due time"}
+                        >
+                          <Bell className="h-3 w-3" />
+                          <span>{task.dueTime || "09:00"}</span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                    {!task.done && (
+                      <button
+                        type="button"
+                        onClick={() => setEditingTask(task)}
+                        className="p-1 text-muted-foreground hover:text-foreground cursor-pointer"
+                        title="Edit task & reminder"
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </button>
+                    )}
+
+                    {mode !== "nextWeek" && !task.done && (
+                      <button
+                        type="button"
+                        onClick={() => moveToNextWeek(task.id)}
+                        className="p-1 text-muted-foreground hover:text-foreground cursor-pointer"
+                        title="Move to Next Week"
+                      >
+                        <ArrowRight className="h-3 w-3" />
+                      </button>
+                    )}
+
+                    {mode === "nextWeek" && !task.done && (
+                      <button
+                        type="button"
+                        onClick={() => moveToThisWeek(task.id)}
+                        className="p-1 text-muted-foreground hover:text-emerald-500 cursor-pointer"
+                        title="Move to Current Week / Today"
+                      >
+                        <ArrowLeft className="h-3 w-3" />
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => remove(task.id)}
+                      className="p-1 text-muted-foreground hover:text-destructive cursor-pointer"
+                      title="Delete"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                </li>
+              ))
+            )}
+          </ul>
+        </div>
+
+        {/* Right Side: Scratchpad Notes (5 cols) */}
+        <div className="lg:col-span-5 flex flex-col gap-3">
+          <div className="flex items-center justify-between px-1">
+            <div className="flex items-center gap-2">
+              <FileText className="h-4 w-4 text-primary" />
+              <h3 className="font-bold text-xs uppercase tracking-wider text-muted-foreground">
+                Scratchpad Notes ({filteredNotes.length})
+              </h3>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => {
+                setActiveNote(null);
+                setNoteModalOpen(true);
+              }}
+              className="rounded-xl font-bold text-xs cursor-pointer h-8"
+            >
+              <Plus className="h-3.5 w-3.5 mr-1" /> New Note
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-2.5 max-h-[520px] overflow-y-auto pr-1">
+            {filteredNotes.length === 0 ? (
+              <div className="p-8 text-center text-xs text-muted-foreground border border-dashed border-border rounded-2xl bg-card/40">
+                No notes captured yet. Click "+ New Note" to save thoughts, links, or ideas.
+              </div>
+            ) : (
+              filteredNotes.map((note) => {
+                const color = NOTE_COLORS[note.color ?? "default"] ?? NOTE_COLORS.default;
+                return (
+                  <div
+                    key={note.id}
+                    className={cn(
+                      "group rounded-2xl border p-3.5 flex flex-col justify-between transition-all shadow-sm cursor-pointer hover:border-primary/40",
+                      color.bg,
+                      color.border,
+                    )}
+                    onClick={() => {
+                      setActiveNote(note);
+                      setNoteViewOpen(true);
+                    }}
+                  >
+                    <div>
+                      <div className="flex items-start justify-between gap-2 mb-1.5">
+                        <h4 className="font-bold text-xs text-foreground line-clamp-1">
+                          {note.title}
+                        </h4>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            togglePin(note.id);
+                          }}
+                          className={cn(
+                            "p-1 rounded transition-colors flex-shrink-0 cursor-pointer",
+                            note.pinned ? "text-primary font-bold" : "text-muted-foreground/40 hover:text-foreground",
+                          )}
+                        >
+                          <Pin className="h-3 w-3" fill={note.pinned ? "currentColor" : "none"} />
+                        </button>
+                      </div>
+                      <p className="text-xs text-muted-foreground whitespace-pre-wrap line-clamp-4 leading-relaxed font-medium">
+                        {note.content}
+                      </p>
+                    </div>
+
+                    <div 
+                      className="pt-3 flex items-center justify-between border-t border-border/40 mt-3 text-[10px] text-muted-foreground"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <span>{new Date(note.updatedAt).toLocaleDateString()}</span>
+
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveNote(note);
+                            setNoteViewOpen(true);
+                          }}
+                          className="px-2 py-0.5 rounded bg-muted/80 hover:bg-muted text-foreground transition-colors flex items-center gap-1 font-medium text-[10px]"
+                          title="View"
+                        >
+                          <Eye className="h-3 w-3" />
+                          <span>View</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveNote(note);
+                            setNoteModalOpen(true);
+                          }}
+                          className="px-2 py-0.5 rounded bg-muted/80 hover:bg-muted text-foreground transition-colors flex items-center gap-1 font-medium text-[10px]"
+                          title="Edit"
+                        >
+                          <Edit3 className="h-3 w-3" />
+                          <span>Edit</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteNote(note)}
+                          className="p-1 rounded hover:bg-destructive/10 text-destructive/70 hover:text-destructive cursor-pointer ml-1"
+                          title="Delete"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      </div>
+
+      <TaskModal
+        open={Boolean(editingTask)}
+        onOpenChange={(open) => !open && setEditingTask(null)}
+        task={editingTask}
+        onSave={(id, patch) => update(id, patch)}
+      />
+
+      <NoteModal
+        open={noteModalOpen}
+        onOpenChange={setNoteModalOpen}
+        note={activeNote}
+        onSave={handleSaveNote}
+      />
+
+      <NoteViewModal
+        open={noteViewOpen}
+        onOpenChange={setNoteViewOpen}
+        note={activeNote}
+        onEdit={(note) => {
+          setActiveNote(note);
+          setNoteModalOpen(true);
+        }}
+      />
+
+      {ConfirmDialogElement}
+    </div>
+  );
+}
+</file>
+
+<file path="src/pages/Tasks/TaskModal.tsx">
+import { useState, useEffect, type FormEvent } from "react";
+import { Bell, Volume2, VolumeX, ShieldAlert } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { getTodayDate } from "@/lib/date";
+import { isNotificationSupported, requestNotificationPermission } from "@/services/notifications";
+import type { TaskPriority, TodoItem } from "@/types/workspace";
+
+interface TaskModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  task: TodoItem | null;
+  onSave: (
+    id: string,
+    patch: {
+      text: string;
+      priority: TaskPriority;
+      dueDate: string;
+      dueTime?: string;
+      reminder?: boolean;
+      reminderOffset?: number;
+      audioAlert?: boolean;
+    }
+  ) => void;
+}
+
+const PRIORITIES: { id: TaskPriority; label: string }[] = [
+  { id: "low", label: "Low" },
+  { id: "medium", label: "Med" },
+  { id: "high", label: "High" },
+];
+
+export function TaskModal({ open, onOpenChange, task, onSave }: TaskModalProps) {
+  const [text, setText] = useState("");
+  const [priority, setPriority] = useState<TaskPriority>("medium");
+  const [dueDate, setDueDate] = useState(getTodayDate());
+  const [dueTime, setDueTime] = useState("");
+  const [reminder, setReminder] = useState(false);
+  const [reminderOffset, setReminderOffset] = useState(0);
+  const [audioAlert, setAudioAlert] = useState(true);
+  const [permStatus, setPermStatus] = useState<string>("granted");
+
+  useEffect(() => {
+    if (!open) return;
+    if (task) {
+      setText(task.text);
+      setPriority(task.priority ?? "medium");
+      setDueDate(task.dueDate ?? getTodayDate());
+      setDueTime(task.dueTime ?? "09:00");
+      setReminder(Boolean(task.reminder));
+      setReminderOffset(task.reminderOffset ?? 0);
+      setAudioAlert(task.audioAlert !== false);
+    } else {
+      setText("");
+      setPriority("medium");
+      setDueDate(getTodayDate());
+      setDueTime("09:00");
+      setReminder(false);
+      setReminderOffset(0);
+      setAudioAlert(true);
+    }
+
+    if (isNotificationSupported()) {
+      setPermStatus(Notification.permission);
+    }
+  }, [open, task]);
+
+  const handleReminderToggle = async (checked: boolean) => {
+    setReminder(checked);
+    if (checked && isNotificationSupported() && Notification.permission !== "granted") {
+      const res = await requestNotificationPermission();
+      setPermStatus(res);
+    }
+  };
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    if (!task || !text.trim()) return;
+    onSave(task.id, {
+      text: text.trim(),
+      priority,
+      dueDate,
+      dueTime: reminder ? dueTime || "09:00" : undefined,
+      reminder,
+      reminderOffset: reminder ? reminderOffset : 0,
+      audioAlert,
+    });
+    onOpenChange(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-sm font-semibold">Edit Task & Reminder</DialogTitle>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit} className="space-y-4 pt-1 text-xs">
+          <div>
+            <Label htmlFor="taskTitle">Task Description *</Label>
+            <Input
+              id="taskTitle"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder="Task details..."
+              className="mt-1 text-sm h-9"
+              autoFocus
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label htmlFor="taskDue">Due Date</Label>
+              <input
+                id="taskDue"
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                className="mt-1 w-full h-9 px-2.5 rounded-md bg-background border border-input text-xs outline-none"
+              />
+            </div>
+            <div>
+              <Label htmlFor="taskPri">Priority</Label>
+              <select
+                id="taskPri"
+                value={priority}
+                onChange={(e) => setPriority(e.target.value as TaskPriority)}
+                className="mt-1 w-full h-9 px-2 rounded-md bg-background border border-input text-xs outline-none"
+              >
+                {PRIORITIES.map((p) => (
+                  <option key={p.id} value={p.id}>{p.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="border border-border/80 rounded-xl p-3 bg-muted/20 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="taskRemind"
+                  checked={reminder}
+                  onCheckedChange={(c) => handleReminderToggle(Boolean(c))}
+                />
+                <Label htmlFor="taskRemind" className="cursor-pointer font-semibold flex items-center gap-1.5 text-foreground">
+                  <Bell className="h-3.5 w-3.5 text-primary" /> Enable Reminder
+                </Label>
+              </div>
+
+              {reminder && (
+                <button
+                  type="button"
+                  onClick={() => setAudioAlert((v) => !v)}
+                  className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground cursor-pointer"
+                  title="Toggle Audio Chime"
+                >
+                  {audioAlert ? <Volume2 className="h-3.5 w-3.5 text-emerald-500" /> : <VolumeX className="h-3.5 w-3.5 text-muted-foreground" />}
+                  <span>{audioAlert ? "Sound On" : "Muted"}</span>
+                </button>
+              )}
+            </div>
+
+            {reminder && (
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <div>
+                  <Label htmlFor="taskTime">Due Time</Label>
+                  <input
+                    id="taskTime"
+                    type="time"
+                    value={dueTime}
+                    onChange={(e) => setDueTime(e.target.value)}
+                    className="mt-1 w-full h-9 px-2 rounded-md bg-background border border-input text-xs outline-none"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="taskOffset">Alert Offset</Label>
+                  <select
+                    id="taskOffset"
+                    value={reminderOffset}
+                    onChange={(e) => setReminderOffset(Number(e.target.value))}
+                    className="mt-1 w-full h-9 px-2 rounded-md bg-background border border-input text-xs outline-none"
+                  >
+                    <option value={0}>At time of event</option>
+                    <option value={5}>5 minutes before</option>
+                    <option value={15}>15 minutes before</option>
+                    <option value={30}>30 minutes before</option>
+                    <option value={60}>1 hour before</option>
+                  </select>
+                </div>
+              </div>
+            )}
+
+            {reminder && permStatus === "denied" && (
+              <div className="flex items-center gap-2 p-2 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-[11px]">
+                <ShieldAlert className="h-4 w-4 shrink-0" />
+                <span>Browser notifications are blocked. Unblock notifications in browser settings for alert popups.</span>
+              </div>
+            )}
+          </div>
+
+          <div className="pt-2 flex justify-end gap-2 border-t border-border">
+            <Button type="button" variant="secondary" size="sm" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" size="sm" className="font-bold">
+              Save Changes
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+</file>
+
+<file path="src/pages/Tasks/useTasks.ts">
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import { createId } from "@/lib/id";
+import { useWorkspaceStore, selectTodos } from "@/stores/workspaceStore";
+import { addDays, getTodayDate, getWeekEnd, getWeekStart } from "@/lib/date";
+import { dispatchTaskNotification, isNotificationSupported } from "@/services/notifications";
+import type { TodoItem, TaskPriority, ReminderStatus } from "@/types/workspace";
+
+export async function ensureReminderPermission(): Promise<
+  NotificationPermission | "unsupported"
+> {
+  if (!isNotificationSupported()) {
+    return "unsupported";
+  }
+
+  if (
+    Notification.permission === "granted" ||
+    Notification.permission === "denied"
+  ) {
+    return Notification.permission;
+  }
+
+  try {
+    return await Notification.requestPermission();
+  } catch {
+    return "denied";
+  }
+}
+
+export type TodoCreateInput = {
+  text: string;
+  dueDate?: string;
+  dueTime?: string;
+  reminder?: boolean;
+  reminderOffset?: number;
+  audioAlert?: boolean;
+  priority?: TaskPriority;
+};
+
+export type TodoPatch = Partial<
+  Pick<
+    TodoItem,
+    | "text"
+    | "dueDate"
+    | "dueTime"
+    | "reminder"
+    | "reminderOffset"
+    | "reminderStatus"
+    | "audioAlert"
+    | "priority"
+    | "done"
+  >
+>;
+
+export function useTasks() {
+  const todos = useWorkspaceStore(selectTodos);
+  const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
+  const timersRef = useRef<Map<string, number>>(new Map());
+  const triggeredIdsRef = useRef<Set<string>>(new Set());
+
+  const today = getTodayDate();
+  const weekStart = getWeekStart();
+  const weekEnd = getWeekEnd();
+
+  const clearTimer = useCallback((id: string) => {
+    const existing = timersRef.current.get(id);
+    if (existing !== undefined) {
+      window.clearTimeout(existing);
+      timersRef.current.delete(id);
+    }
+  }, []);
+
+  const clearAllTimers = useCallback(() => {
+    timersRef.current.forEach((timerId) => window.clearTimeout(timerId));
+    timersRef.current.clear();
+  }, []);
+
+  const fireNotification = useCallback(async (task: TodoItem) => {
+    if (triggeredIdsRef.current.has(task.id)) {
+      return;
+    }
+    triggeredIdsRef.current.add(task.id);
+
+    await dispatchTaskNotification(task);
+
+    setWorkspace((prev) => ({
+      ...prev,
+      todos: prev.todos.map((t) =>
+        t.id === task.id ? { ...t, reminderStatus: "triggered" } : t
+      ),
+    }));
+  }, [setWorkspace]);
+
+  const scheduleTimer = useCallback(
+    (task: TodoItem) => {
+      clearTimer(task.id);
+
+      if (!task.reminder || !task.dueDate || task.done || task.reminderStatus === "dismissed") {
+        return;
       }
-    };
-    reader.readAsText(file);
-    event.target.value = "";
-  };
 
-  return { exportBackup, importBackup };
+      const timeStr = task.dueTime || "09:00";
+      const targetDate = new Date(`${task.dueDate}T${timeStr}:00`);
+      const offsetMs = (task.reminderOffset || 0) * 60 * 1000;
+      const targetTime = targetDate.getTime() - offsetMs;
+      const delay = targetTime - Date.now();
+
+      if (delay <= 0 && delay > -60000) {
+        void fireNotification(task);
+        return;
+      }
+
+      if (delay > 0 && delay <= 2147483647) {
+        const timerId = window.setTimeout(() => {
+          void fireNotification(task);
+          timersRef.current.delete(task.id);
+        }, delay);
+
+        timersRef.current.set(task.id, timerId);
+      }
+    },
+    [clearTimer, fireNotification],
+  );
+
+  const add = useCallback(
+    (input: TodoCreateInput) => {
+      const trimmedText = input.text.trim();
+      if (!trimmedText) return;
+
+      const todo: TodoItem = {
+        id: createId("todo"),
+        text: trimmedText,
+        done: false,
+        date: getTodayDate(),
+        dueDate: input.dueDate ?? getTodayDate(),
+        dueTime: input.dueTime,
+        reminder: Boolean(input.reminder),
+        reminderOffset: input.reminderOffset ?? 0,
+        reminderStatus: input.reminder ? "pending" : undefined,
+        audioAlert: input.audioAlert ?? true,
+        priority: input.priority,
+      };
+
+      setWorkspace((prev) => ({
+        ...prev,
+        todos: [...prev.todos, todo],
+      }));
+
+      if (todo.reminder) {
+        scheduleTimer(todo);
+      }
+    },
+    [setWorkspace, scheduleTimer],
+  );
+
+  const update = useCallback(
+    (id: string, patch: TodoPatch) => {
+      const current = useWorkspaceStore
+        .getState()
+        .workspace.todos.find((t) => t.id === id);
+
+      if (!current) return;
+
+      const resetTrigger =
+        Boolean(patch.reminder && !current.reminder) ||
+        Boolean(patch.dueDate && patch.dueDate !== current.dueDate) ||
+        Boolean(patch.dueTime && patch.dueTime !== current.dueTime) ||
+        Boolean(patch.reminderOffset !== undefined && patch.reminderOffset !== current.reminderOffset);
+
+      if (resetTrigger) {
+        triggeredIdsRef.current.delete(id);
+      }
+
+      const updated: TodoItem = {
+        ...current,
+        ...patch,
+        reminderStatus: resetTrigger ? "pending" : patch.reminderStatus ?? current.reminderStatus,
+        id,
+      };
+
+      setWorkspace((prev) => ({
+        ...prev,
+        todos: prev.todos.map((t) => (t.id === id ? updated : t)),
+      }));
+
+      if (updated.done || !updated.reminder) {
+        clearTimer(id);
+      } else {
+        scheduleTimer(updated);
+      }
+    },
+    [setWorkspace, clearTimer, scheduleTimer],
+  );
+
+  const toggle = useCallback(
+    (id: string) => {
+      setWorkspace((prev) => ({
+        ...prev,
+        todos: prev.todos.map((t) => {
+          if (t.id !== id) return t;
+          const nextDone = !t.done;
+          const next: TodoItem = {
+            ...t,
+            done: nextDone,
+            reminderStatus: nextDone ? "dismissed" : t.reminder ? "pending" : undefined,
+            date: getTodayDate(),
+          };
+
+          if (next.done) {
+            clearTimer(id);
+          } else if (next.reminder) {
+            triggeredIdsRef.current.delete(id);
+            scheduleTimer(next);
+          }
+
+          return next;
+        }),
+      }));
+    },
+    [setWorkspace, clearTimer, scheduleTimer],
+  );
+
+  const remove = useCallback(
+    (id: string) => {
+      clearTimer(id);
+      triggeredIdsRef.current.delete(id);
+      setWorkspace((prev) => ({
+        ...prev,
+        todos: prev.todos.filter((t) => t.id !== id),
+      }));
+    },
+    [setWorkspace, clearTimer],
+  );
+
+  const moveToNextWeek = useCallback(
+    (id: string) => {
+      setWorkspace((prev) => ({
+        ...prev,
+        todos: prev.todos.map((t) => {
+          if (t.id !== id) return t;
+          const nextWeekStart = addDays(weekEnd, 1);
+          return {
+            ...t,
+            dueDate: nextWeekStart,
+            reminderStatus: t.reminder ? ("pending" as ReminderStatus) : undefined,
+          };
+        }),
+      }));
+    },
+    [setWorkspace, weekEnd],
+  );
+
+  const moveToThisWeek = useCallback(
+    (id: string) => {
+      setWorkspace((prev) => ({
+        ...prev,
+        todos: prev.todos.map((t) => {
+          if (t.id !== id) return t;
+          return {
+            ...t,
+            dueDate: getTodayDate(),
+            reminderStatus: t.reminder ? ("pending" as ReminderStatus) : undefined,
+          };
+        }),
+      }));
+    },
+    [setWorkspace],
+  );
+
+  // Split tasks by calendar week bounds
+  const { thisWeek, nextWeek } = useMemo(() => {
+    const thisList: TodoItem[] = [];
+    const nextList: TodoItem[] = [];
+
+    todos.forEach((todo) => {
+      if (!todo.dueDate || todo.dueDate <= weekEnd) {
+        thisList.push(todo);
+      } else {
+        nextList.push(todo);
+      }
+    });
+
+    const sortTasks = (list: TodoItem[]): TodoItem[] =>
+      [...list].sort((a, b) => Number(a.done) - Number(b.done));
+
+    return {
+      thisWeek: sortTasks(thisList),
+      nextWeek: sortTasks(nextList),
+    };
+  }, [todos, weekEnd]);
+
+  // Clean rollover: incomplete tasks from prior to this week roll forward to TODAY
+  useEffect(() => {
+    let needsRollover = false;
+    const currentToday = getTodayDate();
+
+    const rolled = todos.map((todo) => {
+      if (todo.done) return todo;
+      const due = todo.dueDate ?? todo.date;
+      if (due && due < weekStart) {
+        needsRollover = true;
+        return {
+          ...todo,
+          dueDate: currentToday,
+          reminderStatus: todo.reminder ? ("pending" as ReminderStatus) : undefined,
+        };
+      }
+      return todo;
+    });
+
+    if (needsRollover) {
+      setWorkspace((prev) => ({
+        ...prev,
+        todos: rolled,
+      }));
+      return;
+    }
+
+    todos.forEach((todo) => {
+      if (todo.reminder && !todo.done) {
+        scheduleTimer(todo);
+      }
+    });
+
+    const interval = window.setInterval(() => {
+      todos.forEach((todo) => {
+        if (todo.reminder && !todo.done && todo.dueDate && todo.reminderStatus !== "dismissed") {
+          const offsetMs = (todo.reminderOffset || 0) * 60 * 1000;
+          const target = new Date(`${todo.dueDate}T${todo.dueTime || "09:00"}`).getTime() - offsetMs;
+          const diff = target - Date.now();
+          if (diff <= 0 && diff > -120000 && !triggeredIdsRef.current.has(todo.id)) {
+            void fireNotification(todo);
+          }
+        }
+      });
+    }, 20000);
+
+    return () => {
+      window.clearInterval(interval);
+      clearAllTimers();
+    };
+  }, [todos, setWorkspace, scheduleTimer, clearAllTimers, fireNotification, weekStart]);
+
+  return {
+    thisWeek,
+    nextWeek,
+    add,
+    update,
+    toggle,
+    remove,
+    moveToNextWeek,
+    moveToThisWeek,
+  };
 }
 </file>
 
@@ -4890,6 +5855,186 @@ export function AppShell({ header, children }: AppShellProps) {
 }
 </file>
 
+<file path="src/components/auth/AuthGuard.tsx">
+import { type ReactNode } from "react";
+import { Compass } from "lucide-react";
+import { useWorkspaceStore } from "@/stores/workspaceStore";
+import { LoginOverlay } from "./LoginOverlay";
+
+export function AuthGuard({ children }: { children: ReactNode }) {
+  const authState = useWorkspaceStore((state) => state.authState);
+
+  if (authState === "initializing") {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background">
+        <div className="w-12 h-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center animate-pulse-soft mb-4">
+          <Compass className="w-6 h-6 animate-spin" style={{ animationDuration: '3s' }} strokeWidth={2.25} />
+        </div>
+        <div className="text-sm font-medium text-muted-foreground animate-pulse">
+          Authenticating...
+        </div>
+      </div>
+    );
+  }
+
+  if (authState === "unauthenticated") {
+    return <LoginOverlay />;
+  }
+
+  // Only render the router child components when fully authenticated
+  return <>{children}</>;
+}
+</file>
+
+<file path="src/pages/Settings/useBackup.ts">
+import { useState, useRef, type ChangeEvent } from "react";
+import { useWorkspaceStore } from "@/stores/workspaceStore";
+import { CURRENT_BACKUP_VERSION, type BackupEnvelope, migrateBackupPayload } from "@/services/backup/schema";
+import { persistWorkspace } from "@/services/firebase/workspace";
+
+const LOCAL_STORAGE_PREFIX = "launchpad_workspace";
+
+export function useBackup() {
+  const workspace = useWorkspaceStore((state) => state.workspace);
+  const restoreWorkspace = useWorkspaceStore((state) => state.restoreWorkspace);
+  const user = useWorkspaceStore((state) => state.user);
+  
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const exportBackup = () => {
+    try {
+      setIsProcessing(true);
+      setStatusMessage("Packaging workspace...");
+
+      const payload: BackupEnvelope = {
+        app: "reset-launchpad",
+        version: CURRENT_BACKUP_VERSION,
+        exportedAt: new Date().toISOString(),
+        deviceInfo: typeof navigator !== "undefined" ? navigator.userAgent : undefined,
+        workspace: {
+          settings: workspace.settings ?? { title: "Reset Launchpad" },
+          columns: Array.isArray(workspace.columns) ? workspace.columns : [],
+          links: Array.isArray(workspace.links) ? workspace.links : [],
+          todos: Array.isArray(workspace.todos) ? workspace.todos : [],
+          notes: Array.isArray(workspace.notes) ? workspace.notes : [],
+          reports: Array.isArray(workspace.reports) ? workspace.reports : [],
+        },
+      };
+
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const dateTag = new Date().toISOString().slice(0, 10);
+      a.href = url;
+      a.download = `reset-launchpad-backup-v${CURRENT_BACKUP_VERSION}-${dateTag}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      setStatusMessage("Downloaded successfully.");
+      setTimeout(() => setStatusMessage(null), 3000);
+    } catch (err) {
+      console.error("Backup export failure:", err);
+      alert("Failed to export workspace backup.");
+      setStatusMessage(null);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const triggerImportClick = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+      fileInputRef.current.click();
+    }
+  };
+
+  const handleFileSelected = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsProcessing(true);
+    setStatusMessage("Reading file...");
+
+    const reader = new FileReader();
+
+    reader.onload = async (e) => {
+      try {
+        const rawContent = e.target?.result as string;
+        if (!rawContent || !rawContent.trim()) {
+          throw new Error("File is empty.");
+        }
+
+        const parsed = JSON.parse(rawContent);
+        const normalized = migrateBackupPayload(parsed);
+
+        // 1. Atomically restore Zustand store
+        restoreWorkspace(normalized);
+
+        // 2. Force write to localStorage immediately
+        if (user?.uid) {
+          try {
+            localStorage.setItem(`${LOCAL_STORAGE_PREFIX}:${user.uid}`, JSON.stringify(normalized));
+          } catch {}
+
+          // 3. Force sync to Firestore if cloud user
+          if (user.uid !== "local") {
+            try {
+              await persistWorkspace(user.uid, normalized);
+            } catch (cloudErr) {
+              console.warn("Cloud push deferred:", cloudErr);
+            }
+          }
+        }
+
+        const counts = [
+          `${normalized.columns.length} Folders`,
+          `${normalized.links.length} Links`,
+          `${normalized.todos.length} Tasks`,
+          `${normalized.notes?.length ?? 0} Notes`,
+          `${normalized.reports?.length ?? 0} Reports`,
+        ].join(", ");
+
+        setStatusMessage(`Restored: ${counts}`);
+        alert(`Backup restored successfully!\n\nImported:\n${counts}`);
+      } catch (err) {
+        console.error("Backup restore error:", err);
+        const msg = err instanceof Error ? err.message : "Invalid JSON file structure.";
+        setStatusMessage(`Import failed: ${msg}`);
+        alert(`Failed to restore backup: ${msg}`);
+      } finally {
+        setIsProcessing(false);
+        if (event.target) {
+          event.target.value = "";
+        }
+      }
+    };
+
+    reader.onerror = () => {
+      setIsProcessing(false);
+      setStatusMessage("Error reading file.");
+      alert("Could not read the selected backup file.");
+    };
+
+    reader.readAsText(file);
+  };
+
+  return {
+    exportBackup,
+    triggerImportClick,
+    handleFileSelected,
+    fileInputRef,
+    isProcessing,
+    statusMessage,
+  };
+}
+</file>
+
 <file path="src/services/firebase/workspace.ts">
 import {
   doc,
@@ -4988,6 +6133,117 @@ export async function persistWorkspace(
 }
 </file>
 
+<file path="src/stores/securityStore.ts">
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
+
+export type TimeoutDuration = 0 | 60000 | 300000 | 900000 | 3600000; // 0 (Never), 1m, 5m, 15m, 1h
+
+interface SecurityState {
+  passcode: string | null;
+  isLocked: boolean;
+  timeoutDuration: TimeoutDuration;
+  lockOnTabSwitch: boolean;
+  failedAttempts: number;
+  lockoutUntil: number | null;
+  
+  // Actions
+  setPasscode: (code: string) => void;
+  changePasscode: (currentCode: string, newCode: string) => boolean;
+  removePasscode: (currentCode: string) => boolean;
+  lock: () => void;
+  unlock: (code: string) => { success: boolean; rateLimited?: boolean; remainingMs?: number };
+  setTimeoutDuration: (duration: TimeoutDuration) => void;
+  setLockOnTabSwitch: (enabled: boolean) => void;
+}
+
+export const useSecurityStore = create<SecurityState>()(
+  persist(
+    (set, get) => ({
+      passcode: null,
+      isLocked: false,
+      timeoutDuration: 300000, // 5 min default
+      lockOnTabSwitch: false,
+      failedAttempts: 0,
+      lockoutUntil: null,
+
+      setPasscode: (code) =>
+        set({
+          passcode: code,
+          isLocked: false,
+          failedAttempts: 0,
+          lockoutUntil: null,
+        }),
+
+      changePasscode: (currentCode, newCode) => {
+        if (get().passcode === currentCode) {
+          set({
+            passcode: newCode,
+            failedAttempts: 0,
+            lockoutUntil: null,
+          });
+          return true;
+        }
+        return false;
+      },
+
+      removePasscode: (currentCode) => {
+        if (get().passcode === currentCode) {
+          set({
+            passcode: null,
+            isLocked: false,
+            failedAttempts: 0,
+            lockoutUntil: null,
+          });
+          return true;
+        }
+        return false;
+      },
+
+      lock: () => {
+        if (get().passcode) {
+          set({ isLocked: true });
+        }
+      },
+
+      unlock: (code) => {
+        const { passcode, failedAttempts, lockoutUntil } = get();
+        const now = Date.now();
+
+        if (lockoutUntil && now < lockoutUntil) {
+          return {
+            success: false,
+            rateLimited: true,
+            remainingMs: lockoutUntil - now,
+          };
+        }
+
+        if (passcode === code) {
+          set({ isLocked: false, failedAttempts: 0, lockoutUntil: null });
+          return { success: true };
+        }
+
+        const newFailed = failedAttempts + 1;
+        if (newFailed >= 5) {
+          const timeout = now + 30000; // 30 second throttle
+          set({ failedAttempts: newFailed, lockoutUntil: timeout });
+          return { success: false, rateLimited: true, remainingMs: 30000 };
+        }
+
+        set({ failedAttempts: newFailed });
+        return { success: false, rateLimited: false };
+      },
+
+      setTimeoutDuration: (duration) => set({ timeoutDuration: duration }),
+      setLockOnTabSwitch: (enabled) => set({ lockOnTabSwitch: enabled }),
+    }),
+    {
+      name: "launchpad-security",
+    }
+  )
+);
+</file>
+
 <file path="src/types/workspace.ts">
 import type { NoteItem } from "@/pages/Notes/notes.types";
 import type { StoredReport } from "@/pages/Reports/types";
@@ -5022,6 +6278,8 @@ export interface LinkItem {
 
 export type TaskPriority = "low" | "medium" | "high";
 
+export type ReminderStatus = "pending" | "triggered" | "dismissed";
+
 export interface TodoItem {
   id: string;
   text: string;
@@ -5029,6 +6287,9 @@ export interface TodoItem {
   dueDate?: string;
   dueTime?: string;
   reminder?: boolean;
+  reminderOffset?: number; // 0, 5, 15, 30, 60 minutes before
+  reminderStatus?: ReminderStatus;
+  audioAlert?: boolean;
   priority?: TaskPriority;
   date: string;
 }
@@ -5117,15 +6378,27 @@ export function cloneDefaultWorkspace(): Workspace {
 }
 </file>
 
+<file path="src/main.tsx">
+import React from "react";
+import ReactDOM from "react-dom/client";
+import { RouterProvider } from "react-router-dom";
+import { router } from "./router";
+import "./index.css";
+
+ReactDOM.createRoot(document.getElementById("root")!).render(
+  <React.StrictMode>
+    <RouterProvider router={router} />
+  </React.StrictMode>
+);
+</file>
+
 <file path="src/router.tsx">
 import { lazy, Suspense } from "react";
-import {
-  createBrowserRouter,
-  Navigate,
-} from "react-router-dom";
+import { createBrowserRouter, Navigate } from "react-router-dom";
 import { App } from "@/App";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 import { RouteErrorPage } from "@/pages/RouteErrorPage";
+import { AuthProvider } from "@/components/auth/AuthProvider";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 
 const DashboardPage = lazy(() =>
@@ -5134,21 +6407,27 @@ const DashboardPage = lazy(() =>
   })),
 );
 
+const SettingsPage = lazy(() =>
+  import("@/pages/Settings").then((module) => ({
+    default: module.SettingsPage,
+  })),
+);
+
 function PageFallback() {
   return (
     <main className="flex-1 max-w-5xl mx-auto w-full p-6 flex items-center justify-center">
-      <div className="text-sm text-muted-foreground">
-        Loading…
-      </div>
+      <div className="text-sm text-muted-foreground">Loading…</div>
     </main>
   );
 }
 
 function ProtectedShell() {
   return (
-    <AuthGuard>
-      <App />
-    </AuthGuard>
+    <AuthProvider>
+      <AuthGuard>
+        <App />
+      </AuthGuard>
+    </AuthProvider>
   );
 }
 
@@ -5171,7 +6450,11 @@ export const router = createBrowserRouter([
       },
       {
         path: "/settings",
-        element: <Navigate to="/dashboard" replace />,
+        element: (
+          <Suspense fallback={<PageFallback />}>
+            <SettingsPage />
+          </Suspense>
+        ),
       },
       {
         path: "*",
@@ -5187,7 +6470,6 @@ import { useState, useMemo, useEffect } from "react";
 import { 
   Trash2, 
   Plus, 
-  Table as TableIcon,
   ChevronDown, 
   ChevronUp
 } from "lucide-react";
@@ -5217,11 +6499,9 @@ export function ReportsPage() {
 
   const [ledgerOpen, setLedgerOpen] = useState(false);
 
-  // Cloud-synchronized reports from WorkspaceStore
   const reports = useWorkspaceStore((s) => s.workspace.reports || []);
   const setReports = useWorkspaceStore((s) => s.setReports);
 
-  // Auto-migrate legacy localStorage reports into cloud workspace state on initial load
   useEffect(() => {
     if (reports.length === 0) {
       try {
@@ -5266,7 +6546,7 @@ export function ReportsPage() {
                 ptCount,
                 ptAmount,
                 otherCount: safeInt(item.otherCount),
-                otherAmount: safeInt(item.otherAmount),
+                otherAmount,
                 consultation: safeInt(item.consultation),
                 measurement: safeInt(item.measurement),
                 enquiryCompleted: safeInt(item.enquiryCompleted),
@@ -5282,7 +6562,7 @@ export function ReportsPage() {
             });
 
             setReports(() => migrated);
-            localStorage.removeItem(LEGACY_STORAGE_KEY); // Clean up legacy key after migration
+            localStorage.removeItem(LEGACY_STORAGE_KEY);
           }
         }
       } catch (err) {
@@ -5435,7 +6715,7 @@ export function ReportsPage() {
 
   return (
     <div className="flex flex-col gap-4 max-w-full mx-auto w-full pb-20 px-1 sm:px-3">
-      {/* Header & Period Switcher */}
+      {/* 1. Header & Period Switcher */}
       <div className="flex flex-wrap items-center justify-between gap-2.5">
         <div className="flex items-center gap-2">
           <div className="flex rounded-xl bg-muted p-1 text-xs font-semibold gap-1">
@@ -5482,14 +6762,18 @@ export function ReportsPage() {
         </div>
       </div>
 
-      <ReportSummaryCards reports={activeReports} />
-
-      {/* Direct Ingest Modal */}
+      {/* 2. Paste Container (MOVED DIRECTLY ABOVE SUMMARY CARDS) */}
       {reportPasteModalOpen && (
-        <div className="p-4 bg-card border border-primary/50 rounded-2xl space-y-3 shadow-xl animate-in fade-in-50">
-          <div className="flex justify-between items-center text-xs font-bold text-muted-foreground">
-            <span>PASTE DAILY GYM NATION WHATSAPP REPORT</span>
-            <button onClick={closeReportPasteModal} className="text-xs hover:text-foreground">✕</button>
+        <div className="p-4 bg-card border-2 border-primary/40 rounded-2xl space-y-3 shadow-xl animate-in fade-in-50">
+          <div className="flex justify-between items-center text-xs font-bold text-foreground">
+            <span className="uppercase text-primary font-bold">Paste Daily Gym Nation WhatsApp Report</span>
+            <button 
+              type="button"
+              onClick={closeReportPasteModal} 
+              className="px-2.5 py-1 rounded-lg bg-muted text-xs hover:text-foreground font-semibold cursor-pointer transition-colors"
+            >
+              ✕ Close
+            </button>
           </div>
           <textarea
             rows={6}
@@ -5500,17 +6784,20 @@ export function ReportsPage() {
             autoFocus
           />
           <div className="flex justify-end gap-2">
-            <Button size="sm" variant="secondary" onClick={closeReportPasteModal} className="font-bold text-xs rounded-xl">
+            <Button size="sm" variant="secondary" onClick={closeReportPasteModal} className="font-bold text-xs rounded-xl cursor-pointer">
               Cancel
             </Button>
-            <Button size="sm" onClick={handleProcess} disabled={!rawText.trim()} className="font-bold text-xs rounded-xl">
-              Process & Add Row
+            <Button size="sm" onClick={handleProcess} disabled={!rawText.trim()} className="font-bold text-xs rounded-xl cursor-pointer">
+              Process & Add Entry
             </Button>
           </div>
         </div>
       )}
 
-      {/* 1. Performance Summary Table (Unified PT styling, Frozen Period Column) */}
+      {/* 3. Summary Cards */}
+      <ReportSummaryCards reports={activeReports} />
+
+      {/* 4. Performance Summary Table */}
       <div className="border border-border rounded-xl bg-card overflow-hidden shadow-sm">
         <div className="px-3 py-2 bg-muted/40 border-b border-border flex justify-between items-center text-xs font-bold uppercase text-muted-foreground">
           <span>{period === "month" ? "Monthly" : period === "week" ? "Weekly" : "Yearly"} Performance Summary</span>
@@ -5553,7 +6840,7 @@ export function ReportsPage() {
         </div>
       </div>
 
-      {/* 2. Daily Detail Ledger (Unified PT styling, Frozen Date Column) */}
+      {/* 5. Daily Detail Ledger */}
       <div className="border border-border rounded-xl bg-card overflow-hidden shadow-sm">
         <div 
           onClick={() => setLedgerOpen((prev) => !prev)}
@@ -5704,23 +6991,8 @@ export function ReportsPage() {
 }
 </file>
 
-<file path="src/main.tsx">
-import React from "react";
-import ReactDOM from "react-dom/client";
-import { RouterProvider } from "react-router-dom";
-import { router } from "./router";
-import "./index.css";
-
-ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <RouterProvider router={router} />
-  </React.StrictMode>
-);
-</file>
-
 <file path="src/stores/workspaceStore.ts">
 import { create } from "zustand";
-import type { User } from "firebase/auth";
 import type { AppError } from "@/shared/api/errors";
 import {
   cloneDefaultWorkspace,
@@ -5729,6 +7001,9 @@ import {
 } from "@/types/workspace";
 import type { NoteItem } from "@/pages/Notes/notes.types";
 import type { StoredReport } from "@/pages/Reports/types";
+import type { AppUser } from "@/types/auth";
+
+export type AuthState = "initializing" | "authenticated" | "unauthenticated";
 
 export interface SyncState {
   status: "idle" | "active" | "offline" | "error";
@@ -5737,12 +7012,13 @@ export interface SyncState {
 }
 
 export interface WorkspaceStoreState {
-  user: User | null;
+  user: AppUser | null;
+  authState: AuthState;
   workspace: Workspace;
   sync: SyncState;
-  setUser: (user: User | null) => void;
-  // Make setWorkspace support both direct objects AND functional updaters
+  setUser: (user: AppUser | null) => void;
   setWorkspace: (updaterOrWorkspace: Workspace | ((prev: Workspace) => Workspace)) => void;
+  restoreWorkspace: (workspace: Workspace) => void;
   setSync: (sync: SyncState) => void;
   setTodos: (updater: (todos: TodoItem[]) => TodoItem[]) => void;
   setNotes: (updater: (notes: NoteItem[]) => NoteItem[]) => void;
@@ -5751,14 +7027,19 @@ export interface WorkspaceStoreState {
 
 export const useWorkspaceStore = create<WorkspaceStoreState>((set) => ({
   user: null,
+  authState: "initializing",
   workspace: cloneDefaultWorkspace(),
   sync: {
     status: "idle",
     message: "Initializing...",
   },
-  setUser: (user) => set({ user }),
   
-  // Safely handle (prev) => ... logic
+  setUser: (user) => 
+    set({ 
+      user, 
+      authState: user ? "authenticated" : "unauthenticated" 
+    }),
+  
   setWorkspace: (updaterOrWorkspace) =>
     set((state) => ({
       workspace:
@@ -5766,6 +7047,16 @@ export const useWorkspaceStore = create<WorkspaceStoreState>((set) => ({
           ? updaterOrWorkspace(state.workspace)
           : updaterOrWorkspace,
     })),
+
+  // Atomic state replacement with a new object reference
+  restoreWorkspace: (newWorkspace) =>
+    set({
+      workspace: { ...newWorkspace },
+      sync: {
+        status: "active",
+        message: "Restored from Backup",
+      },
+    }),
     
   setSync: (sync) => set({ sync }),
   
@@ -5803,12 +7094,16 @@ import { useEffect } from "react";
 import { Outlet } from "react-router-dom";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { useWorkspaceSync } from "@/services/firebase/useWorkspaceSync";
+import { useReminderEngine } from "@/services/useReminderEngine";
 import { AppShell } from "@/app/AppShell";
 import { QuickCaptureModal } from "@/components/layout/QuickCaptureModal";
+import { PasscodeOverlay } from "@/components/auth/PasscodeOverlay";
 import { useUIStore } from "@/stores/uiStore";
 
 export function App() {
   useWorkspaceSync();
+  useReminderEngine();
+
   const captureOpen = useUIStore((s) => s.captureModalOpen);
   const openCaptureModal = useUIStore((s) => s.openCaptureModal);
   const closeCaptureModal = useUIStore((s) => s.closeCaptureModal);
@@ -5837,6 +7132,7 @@ export function App() {
         open={captureOpen}
         onOpenChange={handleOpenChange}
       />
+      <PasscodeOverlay />
     </AppShell>
   );
 }
@@ -5899,13 +7195,16 @@ import {
   Link as LinkIcon, 
   FolderPlus, 
   FileText, 
-  BarChart3
+  BarChart3,
+  Settings as SettingsIcon,
+  Lock
 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/auth/ThemeToggle";
 import { useAuth } from "@/components/auth/useAuth";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
+import { useSecurityStore } from "@/stores/securityStore";
 import { useUIStore, type ActiveTab } from "@/stores/uiStore";
 import { useBackup } from "@/pages/Settings/useBackup";
 import { SyncIndicator } from "./SyncIndicator";
@@ -5921,6 +7220,9 @@ import {
 export function AppHeader() {
   const user = useWorkspaceStore((s) => s.user);
   const title = useWorkspaceStore((s) => s.workspace.settings.title);
+  const passcode = useSecurityStore((s) => s.passcode);
+  const lock = useSecurityStore((s) => s.lock);
+
   const { logout } = useAuth();
   const { exportBackup, importBackup } = useBackup();
   const location = useLocation();
@@ -6040,6 +7342,21 @@ export function AppHeader() {
                   </div>
                 </DropdownMenuLabel>
               )}
+
+              {passcode && (
+                <DropdownMenuItem onSelect={lock} className="cursor-pointer font-semibold text-primary">
+                  <Lock className="h-3.5 w-3.5 mr-1" />
+                  Lock Workspace
+                </DropdownMenuItem>
+              )}
+
+              <DropdownMenuItem onSelect={() => navigate("/settings")} className="cursor-pointer">
+                <SettingsIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                Settings & Security
+              </DropdownMenuItem>
+
+              <DropdownMenuSeparator />
+
               <DropdownMenuItem onSelect={exportBackup} className="cursor-pointer">
                 <Download className="h-3.5 w-3.5 text-muted-foreground" />
                 Export JSON Backup

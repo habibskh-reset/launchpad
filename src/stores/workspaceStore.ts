@@ -24,6 +24,7 @@ export interface WorkspaceStoreState {
   sync: SyncState;
   setUser: (user: AppUser | null) => void;
   setWorkspace: (updaterOrWorkspace: Workspace | ((prev: Workspace) => Workspace)) => void;
+  restoreWorkspace: (workspace: Workspace) => void;
   setSync: (sync: SyncState) => void;
   setTodos: (updater: (todos: TodoItem[]) => TodoItem[]) => void;
   setNotes: (updater: (notes: NoteItem[]) => NoteItem[]) => void;
@@ -52,6 +53,16 @@ export const useWorkspaceStore = create<WorkspaceStoreState>((set) => ({
           ? updaterOrWorkspace(state.workspace)
           : updaterOrWorkspace,
     })),
+
+  // Atomic state replacement with a new object reference
+  restoreWorkspace: (newWorkspace) =>
+    set({
+      workspace: { ...newWorkspace },
+      sync: {
+        status: "active",
+        message: "Restored from Backup",
+      },
+    }),
     
   setSync: (sync) => set({ sync }),
   
