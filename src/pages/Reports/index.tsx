@@ -24,6 +24,7 @@ const LEGACY_STORAGE_KEY = "launchpad_gn_reports";
 export function ReportsPage() {
   const [rawText, setRawText] = useState("");
   const [period, setPeriod] = useState<"month" | "week" | "year">("month");
+  const [selectedGroupKey, setSelectedGroupKey] = useState<string | null>(null);
   
   const reportPasteModalOpen = useUIStore((s) => s.reportPasteModalOpen);
   const closeReportPasteModal = useUIStore((s) => s.closeReportPasteModal);
@@ -33,6 +34,11 @@ export function ReportsPage() {
 
   const reports = useWorkspaceStore((s) => s.workspace.reports || []);
   const setReports = useWorkspaceStore((s) => s.setReports);
+
+  // Reset selected period when switching between Month/Week/Year views
+  useEffect(() => {
+    setSelectedGroupKey(null);
+  }, [period]);
 
   useEffect(() => {
     if (reports.length === 0) {
@@ -128,6 +134,8 @@ export function ReportsPage() {
 
     setRawText("");
     closeReportPasteModal();
+    // Auto-reset to show the latest group when a new report is added
+    setSelectedGroupKey(null);
   };
 
   const handleDelete = (id: string) => {
@@ -136,20 +144,33 @@ export function ReportsPage() {
 
   const activeReports = useMemo(() => {
     if (reports.length === 0) return [];
+    
+    // Default to the latest report's date if no group is manually selected
     const latestDate = new Date(reports[0].sortTimestamp);
+    let latestGroupKey = "";
+    if (period === "week") {
+      latestGroupKey = getWorkWeekRange(latestDate).key;
+    } else if (period === "month") {
+      latestGroupKey = `${latestDate.getFullYear()}-${String(latestDate.getMonth() + 1).padStart(2, "0")}`;
+    } else {
+      latestGroupKey = `${latestDate.getFullYear()}`;
+    }
+
+    const targetKey = selectedGroupKey || latestGroupKey;
 
     return reports.filter((r) => {
       const rDate = new Date(r.sortTimestamp);
+      let rKey = "";
       if (period === "week") {
-        const diffDays = (latestDate.getTime() - rDate.getTime()) / (1000 * 3600 * 24);
-        return diffDays >= 0 && diffDays <= 6;
+        rKey = getWorkWeekRange(rDate).key;
+      } else if (period === "month") {
+        rKey = `${rDate.getFullYear()}-${String(rDate.getMonth() + 1).padStart(2, "0")}`;
+      } else {
+        rKey = `${rDate.getFullYear()}`;
       }
-      if (period === "month") {
-        return rDate.getMonth() === latestDate.getMonth() && rDate.getFullYear() === latestDate.getFullYear();
-      }
-      return rDate.getFullYear() === latestDate.getFullYear();
+      return rKey === targetKey;
     });
-  }, [reports, period]);
+  }, [reports, period, selectedGroupKey]);
 
   const totals = useMemo(() => {
     return activeReports.reduce(
@@ -184,6 +205,7 @@ export function ReportsPage() {
 
   const periodicBreakdown = useMemo(() => {
     const groups: Record<string, { 
+      key: string;
       label: string; 
       collection: number; 
       newAdm: number; 
@@ -216,6 +238,7 @@ export function ReportsPage() {
 
       if (!groups[groupKey]) {
         groups[groupKey] = {
+          key: groupKey,
           label: groupLabel,
           collection: 0,
           newAdm: 0,
@@ -294,7 +317,7 @@ export function ReportsPage() {
         </div>
       </div>
 
-      {/* 2. Paste Container (MOVED DIRECTLY ABOVE SUMMARY CARDS) */}
+      {/* 2. Paste Container */}
       {reportPasteModalOpen && (
         <div className="p-4 bg-card border-2 border-primary/40 rounded-2xl space-y-3 shadow-xl animate-in fade-in-50">
           <div className="flex justify-between items-center text-xs font-bold text-foreground">
@@ -326,13 +349,14 @@ export function ReportsPage() {
         </div>
       )}
 
-      {/* 3. Summary Cards */}
+      {/* 3. Summary Cards (Filtered to Active Period) */}
       <ReportSummaryCards reports={activeReports} />
 
-      {/* 4. Performance Summary Table */}
+      {/* 4. Performance Summary Table (Interactive Navigation) */}
       <div className="border border-border rounded-xl bg-card overflow-hidden shadow-sm">
         <div className="px-3 py-2 bg-muted/40 border-b border-border flex justify-between items-center text-xs font-bold uppercase text-muted-foreground">
           <span>{period === "month" ? "Monthly" : period === "week" ? "Weekly" : "Yearly"} Performance Summary</span>
+          <span className="text-[10px] lowercase font-normal italic">click a row to filter ledger below</span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-xs text-left border-collapse whitespace-nowrap">
@@ -352,27 +376,45 @@ export function ReportsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {periodicBreakdown.map((row, idx) => (
-                <tr key={idx} className="hover:bg-muted/20 font-medium">
-                  <td className="p-2 font-bold border-r border-border text-foreground sticky left-0 bg-card z-10">{row.label}</td>
-                  <td className="p-2 border-r border-border text-right font-black text-emerald-500">₹{row.collection.toLocaleString("en-IN")}</td>
-                  <td className="p-2 border-r border-border text-right">₹{row.newAdm.toLocaleString("en-IN")}</td>
-                  <td className="p-2 border-r border-border text-right">₹{row.renew.toLocaleString("en-IN")}</td>
-                  <td className="p-2 border-r border-border text-right">₹{row.balance.toLocaleString("en-IN")}</td>
-                  <td className="p-2 border-r border-border text-right">₹{row.pt.toLocaleString("en-IN")}</td>
-                  <td className="p-2 border-r border-border text-center font-bold">{row.consultation}</td>
-                  <td className="p-2 border-r border-border text-center font-bold">{row.measurement}</td>
-                  <td className="p-2 border-r border-border text-right">₹{row.cash.toLocaleString("en-IN")}</td>
-                  <td className="p-2 border-r border-border text-right">₹{row.card.toLocaleString("en-IN")}</td>
-                  <td className="p-2 text-center font-bold">{row.count}</td>
-                </tr>
-              ))}
+              {periodicBreakdown.map((row, idx) => {
+                const isActive = selectedGroupKey 
+                  ? selectedGroupKey === row.key 
+                  : idx === 0; // Default to first (latest) row if nothing selected
+
+                return (
+                  <tr 
+                    key={row.key} 
+                    onClick={() => setSelectedGroupKey(row.key)}
+                    className={cn(
+                      "font-medium cursor-pointer transition-colors",
+                      isActive ? "bg-primary/15 hover:bg-primary/20" : "hover:bg-muted/30"
+                    )}
+                  >
+                    <td className={cn(
+                      "p-2 font-bold border-r border-border sticky left-0 z-10",
+                      isActive ? "text-primary bg-primary/5" : "text-foreground bg-card"
+                    )}>
+                      {row.label}
+                    </td>
+                    <td className="p-2 border-r border-border text-right font-black text-emerald-500">₹{row.collection.toLocaleString("en-IN")}</td>
+                    <td className="p-2 border-r border-border text-right">₹{row.newAdm.toLocaleString("en-IN")}</td>
+                    <td className="p-2 border-r border-border text-right">₹{row.renew.toLocaleString("en-IN")}</td>
+                    <td className="p-2 border-r border-border text-right">₹{row.balance.toLocaleString("en-IN")}</td>
+                    <td className="p-2 border-r border-border text-right">₹{row.pt.toLocaleString("en-IN")}</td>
+                    <td className="p-2 border-r border-border text-center font-bold">{row.consultation}</td>
+                    <td className="p-2 border-r border-border text-center font-bold">{row.measurement}</td>
+                    <td className="p-2 border-r border-border text-right">₹{row.cash.toLocaleString("en-IN")}</td>
+                    <td className="p-2 border-r border-border text-right">₹{row.card.toLocaleString("en-IN")}</td>
+                    <td className="p-2 text-center font-bold">{row.count}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* 5. Daily Detail Ledger */}
+      {/* 5. Daily Detail Ledger (Filtered to Active Period) */}
       <div className="border border-border rounded-xl bg-card overflow-hidden shadow-sm">
         <div 
           onClick={() => setLedgerOpen((prev) => !prev)}
