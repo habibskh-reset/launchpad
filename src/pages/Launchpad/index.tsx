@@ -1,5 +1,6 @@
 import { useState, useMemo, type MouseEvent } from "react";
 import { ChevronDown, FolderOpen, Pencil, Pin, Plus, Trash2, ExternalLink, Sparkles } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useConfirmDialog } from "@/components/shared/ConfirmDialog";
@@ -12,42 +13,42 @@ import type { Folder, FolderColor, LinkItem } from "@/types/workspace";
 
 const FALLBACK_FAVICON = "https://cdn-icons-png.flaticon.com/512/1006/1006771.png";
 
-const COLOR_MAP: Record<FolderColor, { strip: string; glow: string; badge: string; text: string }> = {
+const COLOR_MAP: Record<FolderColor, { strip: string; glow: string; badge: string; iconBg: string }> = {
   amber: {
     strip: "bg-amber-500",
-    glow: "group-hover:border-amber-500/40 border-amber-500/30",
+    glow: "hover:border-amber-500/40 border-amber-500/25",
     badge: "bg-amber-500/10 text-amber-500 border-amber-500/20",
-    text: "text-amber-500",
+    iconBg: "bg-amber-500/15 text-amber-500",
   },
   emerald: {
     strip: "bg-emerald-500",
-    glow: "group-hover:border-emerald-500/40 border-emerald-500/30",
+    glow: "hover:border-emerald-500/40 border-emerald-500/25",
     badge: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
-    text: "text-emerald-500",
+    iconBg: "bg-emerald-500/15 text-emerald-500",
   },
   violet: {
     strip: "bg-violet-500",
-    glow: "group-hover:border-violet-500/40 border-violet-500/30",
+    glow: "hover:border-violet-500/40 border-violet-500/25",
     badge: "bg-violet-500/10 text-violet-500 border-violet-500/20",
-    text: "text-violet-500",
+    iconBg: "bg-violet-500/15 text-violet-500",
   },
   rose: {
     strip: "bg-rose-500",
-    glow: "group-hover:border-rose-500/40 border-rose-500/30",
+    glow: "hover:border-rose-500/40 border-rose-500/25",
     badge: "bg-rose-500/10 text-rose-500 border-rose-500/20",
-    text: "text-rose-500",
+    iconBg: "bg-rose-500/15 text-rose-500",
   },
   cyan: {
     strip: "bg-cyan-500",
-    glow: "group-hover:border-cyan-500/40 border-cyan-500/30",
+    glow: "hover:border-cyan-500/40 border-cyan-500/25",
     badge: "bg-cyan-500/10 text-cyan-500 border-cyan-500/20",
-    text: "text-cyan-500",
+    iconBg: "bg-cyan-500/15 text-cyan-500",
   },
   blue: {
     strip: "bg-blue-500",
-    glow: "group-hover:border-blue-500/40 border-blue-500/30",
+    glow: "hover:border-blue-500/40 border-blue-500/25",
     badge: "bg-blue-500/10 text-blue-500 border-blue-500/20",
-    text: "text-blue-500",
+    iconBg: "bg-blue-500/15 text-blue-500",
   },
 };
 
@@ -57,10 +58,7 @@ export function LaunchpadPage({ searchTerm = "" }: { searchTerm?: string }) {
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
 
   const { openAddLink, openEditLink, openAddFolder, openEditFolder } = useUIStore();
-  
-  // Single selected folder ID for strict accordion behavior
   const [openFolderId, setOpenFolderId] = useState<string | null>(null);
-  
   const { confirm, ConfirmDialogElement } = useConfirmDialog();
 
   const searchLower = searchTerm.toLowerCase().trim();
@@ -110,7 +108,7 @@ export function LaunchpadPage({ searchTerm = "" }: { searchTerm?: string }) {
 
   return (
     <div className="flex flex-col gap-5">
-      {/* Header Bar */}
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="h-2 w-2 rounded-full bg-primary animate-pulse" />
@@ -121,14 +119,14 @@ export function LaunchpadPage({ searchTerm = "" }: { searchTerm?: string }) {
         <Button 
           size="sm" 
           onClick={openAddFolder} 
-          className="rounded-xl font-bold text-xs h-8 px-3.5 bg-primary hover:bg-primary/90 text-primary-foreground shadow-md shadow-primary/20 transition-all cursor-pointer"
+          className="rounded-xl font-bold text-xs h-8 px-3.5 bg-primary hover:bg-primary/90 text-primary-foreground shadow-md shadow-primary/20 transition-all active:scale-95 cursor-pointer"
         >
           <Plus className="h-3.5 w-3.5 mr-1" /> New Folder
         </Button>
       </div>
 
       {columns.length === 0 ? (
-        <div className="rounded-3xl border border-dashed border-border/80 bg-card/40 backdrop-blur-xl p-16 text-center flex flex-col items-center justify-center gap-3 shadow-inner">
+        <div className="rounded-3xl border border-dashed border-border/80 bg-card/40 backdrop-blur-xl p-16 text-center flex flex-col items-center justify-center gap-3">
           <div className="w-14 h-14 rounded-2xl bg-muted/60 flex items-center justify-center text-muted-foreground/50 mb-1">
             <FolderOpen className="h-7 w-7" />
           </div>
@@ -141,30 +139,32 @@ export function LaunchpadPage({ searchTerm = "" }: { searchTerm?: string }) {
           </Button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-start">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 items-start">
           {filteredColumns.map(({ col, links: colLinks }) => {
             const isOpen = searchLower ? true : openFolderId === col.id;
             const theme = COLOR_MAP[col.color] ?? COLOR_MAP.amber;
 
             return (
-              <div
+              <motion.div
                 key={col.id}
+                layout
+                transition={{ type: "spring", stiffness: 400, damping: 30 }}
                 className={cn(
-                  "group relative rounded-2xl border bg-card/80 backdrop-blur-xl transition-all duration-300 overflow-hidden shadow-sm hover:shadow-lg",
-                  isOpen ? theme.glow + " ring-1 ring-border/80" : "border-border/70 hover:border-border"
+                  "group relative rounded-2xl border bg-card/85 backdrop-blur-xl overflow-hidden card-hardware transition-colors duration-200",
+                  isOpen ? theme.glow + " shadow-xl" : "border-border/60 hover:border-border/90 shadow-sm"
                 )}
               >
-                {/* Accent Color Left Strip */}
+                {/* Accent Color Strip */}
                 <span
                   className={cn(
-                    "absolute left-0 top-0 bottom-0 w-1.5 transition-all duration-300",
+                    "absolute left-0 top-0 bottom-0 w-1.5 transition-opacity duration-200",
                     theme.strip,
-                    isOpen ? "opacity-100" : "opacity-75 group-hover:opacity-100"
+                    isOpen ? "opacity-100" : "opacity-60 group-hover:opacity-100"
                   )}
                   aria-hidden
                 />
 
-                {/* Folder Header Banner */}
+                {/* Folder Header Trigger */}
                 <div
                   role="button"
                   tabIndex={0}
@@ -179,8 +179,8 @@ export function LaunchpadPage({ searchTerm = "" }: { searchTerm?: string }) {
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <div className={cn(
-                      "w-8 h-8 rounded-xl flex items-center justify-center text-xs flex-shrink-0 transition-all duration-300 shadow-sm",
-                      isOpen ? "bg-primary text-primary-foreground scale-105" : "bg-muted text-foreground"
+                      "w-8 h-8 rounded-xl flex items-center justify-center text-xs flex-shrink-0 transition-transform duration-200",
+                      isOpen ? "scale-105 shadow-sm " + theme.iconBg : "bg-muted text-foreground"
                     )}>
                       <i className={col.icon || "fa-solid fa-folder"} />
                     </div>
@@ -201,7 +201,7 @@ export function LaunchpadPage({ searchTerm = "" }: { searchTerm?: string }) {
                     <button
                       type="button"
                       onClick={() => openAddLink(col.id)}
-                      className="p-1.5 rounded-lg hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-all cursor-pointer"
+                      className="p-1.5 rounded-lg hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-all cursor-pointer active:scale-95"
                       title="Add link"
                     >
                       <Plus className="h-3.5 w-3.5" />
@@ -210,51 +210,63 @@ export function LaunchpadPage({ searchTerm = "" }: { searchTerm?: string }) {
                     <button
                       type="button"
                       onClick={() => openEditFolder(col.id)}
-                      className="p-1.5 rounded-lg hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-all cursor-pointer"
+                      className="p-1.5 rounded-lg hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-all cursor-pointer active:scale-95"
                       title="Edit folder"
                     >
                       <Pencil className="h-3.5 w-3.5" />
                     </button>
 
-                    <div className={cn(
-                      "w-6 h-6 rounded-lg flex items-center justify-center text-muted-foreground transition-transform duration-300",
-                      isOpen && "rotate-180 text-primary"
-                    )}>
+                    <motion.div
+                      animate={{ rotate: isOpen ? 180 : 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="w-6 h-6 rounded-lg flex items-center justify-center text-muted-foreground"
+                    >
                       <ChevronDown className="h-4 w-4" />
-                    </div>
+                    </motion.div>
                   </div>
                 </div>
 
-                {/* Smooth Animated Accordion Drawer */}
-                {isOpen && (
-                  <div className="px-3 pb-3.5 pt-1.5 border-t border-border/50 bg-muted/15 transition-all duration-300">
-                    {colLinks.length === 0 ? (
-                      <div className="py-7 text-center text-xs text-muted-foreground/70 flex flex-col items-center justify-center gap-1">
-                        <Sparkles className="h-4 w-4 opacity-40 mb-1 text-primary" />
-                        <span>Empty folder</span>
-                        <button
-                          type="button"
-                          onClick={() => openAddLink(col.id)}
-                          className="text-[11px] font-bold text-primary hover:underline mt-1"
-                        >
-                          + Add first bookmark
-                        </button>
+                {/* Animated Drawer */}
+                <AnimatePresence initial={false}>
+                  {isOpen && (
+                    <motion.div
+                      key="content"
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.22, ease: "easeInOut" }}
+                      className="border-t border-border/50 bg-muted/20 overflow-hidden"
+                    >
+                      <div className="px-3 pb-3 pt-2">
+                        {colLinks.length === 0 ? (
+                          <div className="py-6 text-center text-xs text-muted-foreground/70 flex flex-col items-center justify-center gap-1">
+                            <Sparkles className="h-4 w-4 opacity-40 mb-1 text-primary" />
+                            <span>No links inside</span>
+                            <button
+                              type="button"
+                              onClick={() => openAddLink(col.id)}
+                              className="text-[11px] font-bold text-primary hover:underline mt-1 cursor-pointer"
+                            >
+                              + Add first bookmark
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 gap-1">
+                            {colLinks.map((link) => (
+                              <LinkRowItem
+                                key={link.id}
+                                link={link}
+                                onEdit={openEditLink}
+                                onDelete={handleDeleteLink}
+                              />
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    ) : (
-                      <div className="grid grid-cols-1 gap-1.5 pt-1">
-                        {colLinks.map((link) => (
-                          <LinkRowItem
-                            key={link.id}
-                            link={link}
-                            onEdit={openEditLink}
-                            onDelete={handleDeleteLink}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </motion.div>
             );
           })}
         </div>
@@ -296,7 +308,7 @@ function LinkRowItem({
       href={link.url}
       target="_blank"
       rel="noopener noreferrer"
-      className="group/item relative flex items-center justify-between gap-3 rounded-xl border border-transparent hover:border-border/80 hover:bg-card p-2.5 transition-all duration-200 shadow-none hover:shadow-md cursor-pointer"
+      className="group/item flex items-center justify-between gap-3 rounded-xl border border-transparent hover:border-border/80 hover:bg-card p-2 transition-all duration-150 shadow-none hover:shadow-md cursor-pointer active:scale-[0.99]"
     >
       <div className="flex items-center gap-2.5 min-w-0 flex-1">
         <div className="w-6 h-6 rounded-lg bg-background border border-border/60 flex items-center justify-center flex-shrink-0 shadow-sm overflow-hidden p-0.5">
@@ -330,7 +342,7 @@ function LinkRowItem({
         <button
           type="button"
           onClick={handleEdit}
-          className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
           title="Edit link"
         >
           <Pencil className="h-3 w-3" />
@@ -338,7 +350,7 @@ function LinkRowItem({
         <button
           type="button"
           onClick={handleDelete}
-          className="p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+          className="p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
           title="Delete link"
         >
           <Trash2 className="h-3 w-3" />

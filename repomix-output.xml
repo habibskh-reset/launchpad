@@ -2640,41 +2640,6 @@ export function RouteErrorPage() {
 }
 </file>
 
-<file path="src/services/backup/schema.ts">
-import type { Workspace } from "@/types/workspace";
-import { normalizeWorkspace } from "@/services/firebase/workspace";
-
-export const CURRENT_BACKUP_VERSION = 3;
-
-export interface BackupEnvelope {
-  app: string;
-  version: number;
-  exportedAt: string;
-  deviceInfo?: string;
-  workspace: Workspace;
-}
-
-export function migrateBackupPayload(raw: unknown): Workspace {
-  if (!raw || typeof raw !== "object") {
-    throw new Error("Invalid file content: Expected a JSON object.");
-  }
-
-  const obj = raw as Record<string, unknown>;
-
-  // Check if it's wrapped in an envelope
-  if ("workspace" in obj && obj.workspace && typeof obj.workspace === "object") {
-    return normalizeWorkspace(obj.workspace as Partial<Workspace>);
-  }
-
-  // Handle direct raw workspace export
-  if ("columns" in obj || "links" in obj || "todos" in obj || "reports" in obj) {
-    return normalizeWorkspace(obj as Partial<Workspace>);
-  }
-
-  throw new Error("Unrecognized backup format. Ensure this is a Reset Launchpad backup file.");
-}
-</file>
-
 <file path="src/services/firebase/app.ts">
 import { getApps, initializeApp, type FirebaseApp } from "firebase/app";
 import { getAuth, type Auth } from "firebase/auth";
@@ -4222,142 +4187,6 @@ export function ReportSummaryCards({ reports }: Props) {
 }
 </file>
 
-<file path="src/pages/Settings/index.tsx">
-import { Link } from "react-router-dom";
-import { ArrowLeft, Download, Upload, CheckCircle2 } from "lucide-react";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { useBackup } from "./useBackup";
-import { useWorkspaceStore } from "@/stores/workspaceStore";
-import { SecuritySettings } from "./SecuritySettings";
-
-export function SettingsPage() {
-  const {
-    exportBackup,
-    triggerImportClick,
-    handleFileSelected,
-    fileInputRef,
-    isProcessing,
-    statusMessage,
-  } = useBackup();
-
-  const user = useWorkspaceStore((s) => s.user);
-  const folderCount = useWorkspaceStore((s) => s.workspace.columns.length);
-  const linkCount = useWorkspaceStore((s) => s.workspace.links.length);
-  const todoCount = useWorkspaceStore((s) => s.workspace.todos.length);
-  const noteCount = useWorkspaceStore((s) => s.workspace.notes?.length ?? 0);
-  const reportCount = useWorkspaceStore((s) => s.workspace.reports?.length ?? 0);
-
-  return (
-    <main className="flex-1 max-w-3xl mx-auto w-full p-4 sm:p-6 flex flex-col gap-6 pb-20 lg:pb-8">
-      <header className="flex items-center justify-between gap-4">
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2">
-            <Button asChild variant="ghost" size="icon" className="h-8 w-8 rounded-lg cursor-pointer">
-              <Link to="/dashboard" aria-label="Back to Dashboard">
-                <ArrowLeft className="h-4 w-4" />
-              </Link>
-            </Button>
-            <h1 className="text-lg font-semibold tracking-tight">Settings & Security</h1>
-          </div>
-          <p className="text-xs text-muted-foreground ml-10">
-            Signed in as {user?.email ?? "anonymous"}
-          </p>
-        </div>
-      </header>
-
-      <SecuritySettings />
-
-      <Card className="p-5 space-y-3">
-        <h2 className="font-medium text-sm">Workspace Overview</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-center">
-          <Stat label="Folders" value={folderCount} />
-          <Stat label="Links" value={linkCount} />
-          <Stat label="Todos" value={todoCount} />
-          <Stat label="Notes" value={noteCount} />
-          <Stat label="Gym Reports" value={reportCount} highlight />
-        </div>
-      </Card>
-
-      <Card className="p-5 space-y-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="font-medium text-sm">Backup & Restore Pipeline</h2>
-            <p className="text-xs text-muted-foreground">
-              Direct JSON file sync compatible with your Google Drive backup folder.
-            </p>
-          </div>
-          {statusMessage && (
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-500 bg-emerald-500/10 px-2.5 py-1 rounded-lg">
-              <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate max-w-[200px] sm:max-w-xs">{statusMessage}</span>
-            </div>
-          )}
-        </div>
-
-        <div className="flex flex-wrap gap-2 pt-2">
-          <Button
-            type="button"
-            onClick={exportBackup}
-            disabled={isProcessing}
-            variant="default"
-            className="cursor-pointer font-bold text-xs rounded-xl h-9"
-          >
-            <Download className="h-3.5 w-3.5 mr-1.5" />
-            Export Complete Backup
-          </Button>
-
-          <Button
-            type="button"
-            onClick={triggerImportClick}
-            disabled={isProcessing}
-            variant="secondary"
-            className="cursor-pointer font-bold text-xs rounded-xl h-9 border border-border"
-          >
-            <Upload className="h-3.5 w-3.5 mr-1.5" />
-            Restore from Drive / File
-          </Button>
-
-          {/* Hidden input triggered directly by ref */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".json,application/json"
-            onChange={handleFileSelected}
-            className="hidden"
-          />
-        </div>
-      </Card>
-    </main>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  highlight = false,
-}: {
-  label: string;
-  value: number;
-  highlight?: boolean;
-}) {
-  return (
-    <div
-      className={`rounded-xl bg-muted/60 border ${
-        highlight ? "border-primary/40 bg-primary/5" : "border-border"
-      } p-3 transition-colors`}
-    >
-      <div className={`text-xl font-bold ${highlight ? "text-primary" : "text-foreground"}`}>
-        {value}
-      </div>
-      <div className="text-[10px] uppercase font-bold text-muted-foreground mt-0.5 tracking-wider">
-        {label}
-      </div>
-    </div>
-  );
-}
-</file>
-
 <file path="src/pages/Tasks/index.tsx">
 import { useState, useMemo, type FormEvent } from "react";
 import { 
@@ -5484,6 +5313,41 @@ export function useTasks() {
 }
 </file>
 
+<file path="src/services/backup/schema.ts">
+import type { Workspace } from "@/types/workspace";
+import { normalizeWorkspace } from "@/services/firebase/workspace";
+
+export const CURRENT_BACKUP_VERSION = 3;
+
+export interface BackupEnvelope {
+  app: string;
+  version: number;
+  exportedAt: string;
+  deviceInfo?: string;
+  workspace: Workspace;
+}
+
+export function migrateBackupPayload(raw: unknown): Workspace {
+  if (!raw || typeof raw !== "object") {
+    throw new Error("Invalid file content: Expected a JSON object.");
+  }
+
+  const obj = raw as Record<string, any>;
+
+  // Check wrapper candidates: envelope (workspace), state, data, or raw root
+  const candidate = obj.workspace || obj.data || obj.state || obj;
+
+  return normalizeWorkspace({
+    settings: candidate.settings ?? { title: "Reset Launchpad" },
+    columns: Array.isArray(candidate.columns) ? candidate.columns : [],
+    links: Array.isArray(candidate.links) ? candidate.links : [],
+    todos: Array.isArray(candidate.todos) ? candidate.todos : [],
+    notes: Array.isArray(candidate.notes) ? candidate.notes : [],
+    reports: Array.isArray(candidate.reports) ? candidate.reports : [],
+  });
+}
+</file>
+
 <file path="src/services/firebase/useWorkspaceSync.ts">
 import { useEffect, useRef } from "react";
 import {
@@ -5886,152 +5750,139 @@ export function AuthGuard({ children }: { children: ReactNode }) {
 }
 </file>
 
-<file path="src/pages/Settings/useBackup.ts">
-import { useState, useRef, type ChangeEvent } from "react";
+<file path="src/pages/Settings/index.tsx">
+import { Link } from "react-router-dom";
+import { ArrowLeft, Download, Upload, CheckCircle2 } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { useBackup } from "./useBackup";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
-import { CURRENT_BACKUP_VERSION, type BackupEnvelope, migrateBackupPayload } from "@/services/backup/schema";
-import { persistWorkspace } from "@/services/firebase/workspace";
+import { SecuritySettings } from "./SecuritySettings";
 
-const LOCAL_STORAGE_PREFIX = "launchpad_workspace";
-
-export function useBackup() {
-  const workspace = useWorkspaceStore((state) => state.workspace);
-  const restoreWorkspace = useWorkspaceStore((state) => state.restoreWorkspace);
-  const user = useWorkspaceStore((state) => state.user);
-  
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-  const exportBackup = () => {
-    try {
-      setIsProcessing(true);
-      setStatusMessage("Packaging workspace...");
-
-      const payload: BackupEnvelope = {
-        app: "reset-launchpad",
-        version: CURRENT_BACKUP_VERSION,
-        exportedAt: new Date().toISOString(),
-        deviceInfo: typeof navigator !== "undefined" ? navigator.userAgent : undefined,
-        workspace: {
-          settings: workspace.settings ?? { title: "Reset Launchpad" },
-          columns: Array.isArray(workspace.columns) ? workspace.columns : [],
-          links: Array.isArray(workspace.links) ? workspace.links : [],
-          todos: Array.isArray(workspace.todos) ? workspace.todos : [],
-          notes: Array.isArray(workspace.notes) ? workspace.notes : [],
-          reports: Array.isArray(workspace.reports) ? workspace.reports : [],
-        },
-      };
-
-      const blob = new Blob([JSON.stringify(payload, null, 2)], {
-        type: "application/json",
-      });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      const dateTag = new Date().toISOString().slice(0, 10);
-      a.href = url;
-      a.download = `reset-launchpad-backup-v${CURRENT_BACKUP_VERSION}-${dateTag}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-
-      setStatusMessage("Downloaded successfully.");
-      setTimeout(() => setStatusMessage(null), 3000);
-    } catch (err) {
-      console.error("Backup export failure:", err);
-      alert("Failed to export workspace backup.");
-      setStatusMessage(null);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const triggerImportClick = () => {
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-      fileInputRef.current.click();
-    }
-  };
-
-  const handleFileSelected = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    setIsProcessing(true);
-    setStatusMessage("Reading file...");
-
-    const reader = new FileReader();
-
-    reader.onload = async (e) => {
-      try {
-        const rawContent = e.target?.result as string;
-        if (!rawContent || !rawContent.trim()) {
-          throw new Error("File is empty.");
-        }
-
-        const parsed = JSON.parse(rawContent);
-        const normalized = migrateBackupPayload(parsed);
-
-        // 1. Atomically restore Zustand store
-        restoreWorkspace(normalized);
-
-        // 2. Force write to localStorage immediately
-        if (user?.uid) {
-          try {
-            localStorage.setItem(`${LOCAL_STORAGE_PREFIX}:${user.uid}`, JSON.stringify(normalized));
-          } catch {}
-
-          // 3. Force sync to Firestore if cloud user
-          if (user.uid !== "local") {
-            try {
-              await persistWorkspace(user.uid, normalized);
-            } catch (cloudErr) {
-              console.warn("Cloud push deferred:", cloudErr);
-            }
-          }
-        }
-
-        const counts = [
-          `${normalized.columns.length} Folders`,
-          `${normalized.links.length} Links`,
-          `${normalized.todos.length} Tasks`,
-          `${normalized.notes?.length ?? 0} Notes`,
-          `${normalized.reports?.length ?? 0} Reports`,
-        ].join(", ");
-
-        setStatusMessage(`Restored: ${counts}`);
-        alert(`Backup restored successfully!\n\nImported:\n${counts}`);
-      } catch (err) {
-        console.error("Backup restore error:", err);
-        const msg = err instanceof Error ? err.message : "Invalid JSON file structure.";
-        setStatusMessage(`Import failed: ${msg}`);
-        alert(`Failed to restore backup: ${msg}`);
-      } finally {
-        setIsProcessing(false);
-        if (event.target) {
-          event.target.value = "";
-        }
-      }
-    };
-
-    reader.onerror = () => {
-      setIsProcessing(false);
-      setStatusMessage("Error reading file.");
-      alert("Could not read the selected backup file.");
-    };
-
-    reader.readAsText(file);
-  };
-
-  return {
+export function SettingsPage() {
+  const {
     exportBackup,
     triggerImportClick,
     handleFileSelected,
     fileInputRef,
     isProcessing,
     statusMessage,
-  };
+  } = useBackup();
+
+  const user = useWorkspaceStore((s) => s.user);
+  const folderCount = useWorkspaceStore((s) => s.workspace.columns.length);
+  const linkCount = useWorkspaceStore((s) => s.workspace.links.length);
+  const todoCount = useWorkspaceStore((s) => s.workspace.todos.length);
+  const noteCount = useWorkspaceStore((s) => s.workspace.notes?.length ?? 0);
+  const reportCount = useWorkspaceStore((s) => s.workspace.reports?.length ?? 0);
+
+  return (
+    <main className="flex-1 max-w-3xl mx-auto w-full p-4 sm:p-6 flex flex-col gap-6 pb-20 lg:pb-8">
+      <header className="flex items-center justify-between gap-4">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <Button asChild variant="ghost" size="icon" className="h-8 w-8 rounded-lg cursor-pointer">
+              <Link to="/dashboard" aria-label="Back to Dashboard">
+                <ArrowLeft className="h-4 w-4" />
+              </Link>
+            </Button>
+            <h1 className="text-lg font-semibold tracking-tight">Settings & Security</h1>
+          </div>
+          <p className="text-xs text-muted-foreground ml-10">
+            Signed in as {user?.email ?? "anonymous"}
+          </p>
+        </div>
+      </header>
+
+      <SecuritySettings />
+
+      <Card className="p-5 space-y-3">
+        <h2 className="font-medium text-sm">Workspace Overview</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-center">
+          <Stat label="Folders" value={folderCount} />
+          <Stat label="Links" value={linkCount} />
+          <Stat label="Todos" value={todoCount} />
+          <Stat label="Notes" value={noteCount} />
+          <Stat label="Gym Reports" value={reportCount} highlight />
+        </div>
+      </Card>
+
+      <Card className="p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="font-medium text-sm">Backup & Restore Pipeline</h2>
+            <p className="text-xs text-muted-foreground">
+              Direct JSON file sync compatible with your Google Drive backup folder.
+            </p>
+          </div>
+          {statusMessage && (
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-500 bg-emerald-500/10 px-2.5 py-1 rounded-lg">
+              <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate max-w-[200px] sm:max-w-xs">{statusMessage}</span>
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-wrap gap-2 pt-2">
+          <Button
+            type="button"
+            onClick={exportBackup}
+            disabled={isProcessing}
+            variant="default"
+            className="cursor-pointer font-bold text-xs rounded-xl h-9"
+          >
+            <Download className="h-3.5 w-3.5 mr-1.5" />
+            Export Complete Backup
+          </Button>
+
+          <Button
+            type="button"
+            onClick={triggerImportClick}
+            disabled={isProcessing}
+            variant="secondary"
+            className="cursor-pointer font-bold text-xs rounded-xl h-9 border border-border"
+          >
+            <Upload className="h-3.5 w-3.5 mr-1.5" />
+            Restore from Drive / File
+          </Button>
+
+          {/* Hidden input triggered directly by ref */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,application/json"
+            onChange={handleFileSelected}
+            className="hidden"
+          />
+        </div>
+      </Card>
+    </main>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  highlight = false,
+}: {
+  label: string;
+  value: number;
+  highlight?: boolean;
+}) {
+  return (
+    <div
+      className={`rounded-xl bg-muted/60 border ${
+        highlight ? "border-primary/40 bg-primary/5" : "border-border"
+      } p-3 transition-colors`}
+    >
+      <div className={`text-xl font-bold ${highlight ? "text-primary" : "text-foreground"}`}>
+        {value}
+      </div>
+      <div className="text-[10px] uppercase font-bold text-muted-foreground mt-0.5 tracking-wider">
+        {label}
+      </div>
+    </div>
+  );
 }
 </file>
 
@@ -6130,6 +5981,154 @@ export async function persistWorkspace(
 ): Promise<void> {
   const cleanWorkspace = sanitizeForFirestore(workspace) as Workspace;
   await setDoc(userDocRef(uid), cleanWorkspace);
+}
+</file>
+
+<file path="src/pages/Settings/useBackup.ts">
+import { useState, useRef, type ChangeEvent } from "react";
+import { useWorkspaceStore } from "@/stores/workspaceStore";
+import { CURRENT_BACKUP_VERSION, type BackupEnvelope, migrateBackupPayload } from "@/services/backup/schema";
+import { persistWorkspace } from "@/services/firebase/workspace";
+
+const LOCAL_STORAGE_PREFIX = "launchpad_workspace";
+
+export function useBackup() {
+  const workspace = useWorkspaceStore((state) => state.workspace);
+  const restoreWorkspace = useWorkspaceStore((state) => state.restoreWorkspace);
+  const user = useWorkspaceStore((state) => state.user);
+
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const exportBackup = () => {
+    try {
+      setIsProcessing(true);
+      setStatusMessage("Packaging workspace...");
+
+      const payload: BackupEnvelope = {
+        app: "reset-launchpad",
+        version: CURRENT_BACKUP_VERSION,
+        exportedAt: new Date().toISOString(),
+        deviceInfo: typeof navigator !== "undefined" ? navigator.userAgent : undefined,
+        workspace: {
+          settings: workspace.settings ?? { title: "Reset Launchpad" },
+          columns: Array.isArray(workspace.columns) ? workspace.columns : [],
+          links: Array.isArray(workspace.links) ? workspace.links : [],
+          todos: Array.isArray(workspace.todos) ? workspace.todos : [],
+          notes: Array.isArray(workspace.notes) ? workspace.notes : [],
+          reports: Array.isArray(workspace.reports) ? workspace.reports : [],
+        },
+      };
+
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const dateTag = new Date().toISOString().slice(0, 10);
+      a.href = url;
+      a.download = `reset-launchpad-backup-v${CURRENT_BACKUP_VERSION}-${dateTag}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      setStatusMessage("Downloaded successfully.");
+      setTimeout(() => setStatusMessage(null), 3000);
+    } catch (err) {
+      console.error("Backup export failure:", err);
+      alert("Failed to export backup.");
+      setStatusMessage(null);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const triggerImportClick = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+      fileInputRef.current.click();
+    }
+  };
+
+  const importBackup = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsProcessing(true);
+    setStatusMessage("Reading file...");
+
+    const reader = new FileReader();
+
+    reader.onload = async (e) => {
+      try {
+        const rawContent = e.target?.result as string;
+        if (!rawContent || !rawContent.trim()) {
+          throw new Error("The selected file is empty.");
+        }
+
+        const parsed = JSON.parse(rawContent);
+        const normalized = migrateBackupPayload(parsed);
+
+        // 1. Atomically restore in-memory Zustand store
+        restoreWorkspace(normalized);
+
+        // 2. Persist directly to local cache
+        const uid = user?.uid || "local";
+        try {
+          localStorage.setItem(`${LOCAL_STORAGE_PREFIX}:${uid}`, JSON.stringify(normalized));
+        } catch {}
+
+        // 3. Persist to Firestore if authenticated cloud user
+        if (uid !== "local") {
+          try {
+            await persistWorkspace(uid, normalized);
+          } catch (cloudErr) {
+            console.warn("Cloud backup write deferred:", cloudErr);
+          }
+        }
+
+        const counts = [
+          `${normalized.columns.length} Folders`,
+          `${normalized.links.length} Links`,
+          `${normalized.todos.length} Tasks`,
+          `${normalized.notes?.length ?? 0} Notes`,
+          `${normalized.reports?.length ?? 0} Gym Reports`,
+        ].join(", ");
+
+        setStatusMessage(`Restored: ${counts}`);
+        alert(`Backup Restored Successfully!\n\nImported:\n${counts}`);
+      } catch (err) {
+        console.error("Restore failed:", err);
+        const msg = err instanceof Error ? err.message : "Invalid JSON backup file.";
+        setStatusMessage(`Import failed: ${msg}`);
+        alert(`Failed to restore backup: ${msg}`);
+      } finally {
+        setIsProcessing(false);
+        if (event.target) {
+          event.target.value = "";
+        }
+      }
+    };
+
+    reader.onerror = () => {
+      setIsProcessing(false);
+      setStatusMessage("Error reading file.");
+      alert("Could not read the selected backup file.");
+    };
+
+    reader.readAsText(file);
+  };
+
+  return {
+    exportBackup,
+    triggerImportClick,
+    importBackup,
+    fileInputRef,
+    isProcessing,
+    statusMessage,
+  };
 }
 </file>
 
@@ -6492,6 +6491,7 @@ const LEGACY_STORAGE_KEY = "launchpad_gn_reports";
 export function ReportsPage() {
   const [rawText, setRawText] = useState("");
   const [period, setPeriod] = useState<"month" | "week" | "year">("month");
+  const [selectedGroupKey, setSelectedGroupKey] = useState<string | null>(null);
   
   const reportPasteModalOpen = useUIStore((s) => s.reportPasteModalOpen);
   const closeReportPasteModal = useUIStore((s) => s.closeReportPasteModal);
@@ -6501,6 +6501,11 @@ export function ReportsPage() {
 
   const reports = useWorkspaceStore((s) => s.workspace.reports || []);
   const setReports = useWorkspaceStore((s) => s.setReports);
+
+  // Reset selected period when switching between Month/Week/Year views
+  useEffect(() => {
+    setSelectedGroupKey(null);
+  }, [period]);
 
   useEffect(() => {
     if (reports.length === 0) {
@@ -6596,6 +6601,8 @@ export function ReportsPage() {
 
     setRawText("");
     closeReportPasteModal();
+    // Auto-reset to show the latest group when a new report is added
+    setSelectedGroupKey(null);
   };
 
   const handleDelete = (id: string) => {
@@ -6604,20 +6611,33 @@ export function ReportsPage() {
 
   const activeReports = useMemo(() => {
     if (reports.length === 0) return [];
+    
+    // Default to the latest report's date if no group is manually selected
     const latestDate = new Date(reports[0].sortTimestamp);
+    let latestGroupKey = "";
+    if (period === "week") {
+      latestGroupKey = getWorkWeekRange(latestDate).key;
+    } else if (period === "month") {
+      latestGroupKey = `${latestDate.getFullYear()}-${String(latestDate.getMonth() + 1).padStart(2, "0")}`;
+    } else {
+      latestGroupKey = `${latestDate.getFullYear()}`;
+    }
+
+    const targetKey = selectedGroupKey || latestGroupKey;
 
     return reports.filter((r) => {
       const rDate = new Date(r.sortTimestamp);
+      let rKey = "";
       if (period === "week") {
-        const diffDays = (latestDate.getTime() - rDate.getTime()) / (1000 * 3600 * 24);
-        return diffDays >= 0 && diffDays <= 6;
+        rKey = getWorkWeekRange(rDate).key;
+      } else if (period === "month") {
+        rKey = `${rDate.getFullYear()}-${String(rDate.getMonth() + 1).padStart(2, "0")}`;
+      } else {
+        rKey = `${rDate.getFullYear()}`;
       }
-      if (period === "month") {
-        return rDate.getMonth() === latestDate.getMonth() && rDate.getFullYear() === latestDate.getFullYear();
-      }
-      return rDate.getFullYear() === latestDate.getFullYear();
+      return rKey === targetKey;
     });
-  }, [reports, period]);
+  }, [reports, period, selectedGroupKey]);
 
   const totals = useMemo(() => {
     return activeReports.reduce(
@@ -6652,6 +6672,7 @@ export function ReportsPage() {
 
   const periodicBreakdown = useMemo(() => {
     const groups: Record<string, { 
+      key: string;
       label: string; 
       collection: number; 
       newAdm: number; 
@@ -6684,6 +6705,7 @@ export function ReportsPage() {
 
       if (!groups[groupKey]) {
         groups[groupKey] = {
+          key: groupKey,
           label: groupLabel,
           collection: 0,
           newAdm: 0,
@@ -6762,7 +6784,7 @@ export function ReportsPage() {
         </div>
       </div>
 
-      {/* 2. Paste Container (MOVED DIRECTLY ABOVE SUMMARY CARDS) */}
+      {/* 2. Paste Container */}
       {reportPasteModalOpen && (
         <div className="p-4 bg-card border-2 border-primary/40 rounded-2xl space-y-3 shadow-xl animate-in fade-in-50">
           <div className="flex justify-between items-center text-xs font-bold text-foreground">
@@ -6794,13 +6816,14 @@ export function ReportsPage() {
         </div>
       )}
 
-      {/* 3. Summary Cards */}
+      {/* 3. Summary Cards (Filtered to Active Period) */}
       <ReportSummaryCards reports={activeReports} />
 
-      {/* 4. Performance Summary Table */}
+      {/* 4. Performance Summary Table (Interactive Navigation) */}
       <div className="border border-border rounded-xl bg-card overflow-hidden shadow-sm">
         <div className="px-3 py-2 bg-muted/40 border-b border-border flex justify-between items-center text-xs font-bold uppercase text-muted-foreground">
           <span>{period === "month" ? "Monthly" : period === "week" ? "Weekly" : "Yearly"} Performance Summary</span>
+          <span className="text-[10px] lowercase font-normal italic">click a row to filter ledger below</span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-xs text-left border-collapse whitespace-nowrap">
@@ -6820,27 +6843,45 @@ export function ReportsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {periodicBreakdown.map((row, idx) => (
-                <tr key={idx} className="hover:bg-muted/20 font-medium">
-                  <td className="p-2 font-bold border-r border-border text-foreground sticky left-0 bg-card z-10">{row.label}</td>
-                  <td className="p-2 border-r border-border text-right font-black text-emerald-500">₹{row.collection.toLocaleString("en-IN")}</td>
-                  <td className="p-2 border-r border-border text-right">₹{row.newAdm.toLocaleString("en-IN")}</td>
-                  <td className="p-2 border-r border-border text-right">₹{row.renew.toLocaleString("en-IN")}</td>
-                  <td className="p-2 border-r border-border text-right">₹{row.balance.toLocaleString("en-IN")}</td>
-                  <td className="p-2 border-r border-border text-right">₹{row.pt.toLocaleString("en-IN")}</td>
-                  <td className="p-2 border-r border-border text-center font-bold">{row.consultation}</td>
-                  <td className="p-2 border-r border-border text-center font-bold">{row.measurement}</td>
-                  <td className="p-2 border-r border-border text-right">₹{row.cash.toLocaleString("en-IN")}</td>
-                  <td className="p-2 border-r border-border text-right">₹{row.card.toLocaleString("en-IN")}</td>
-                  <td className="p-2 text-center font-bold">{row.count}</td>
-                </tr>
-              ))}
+              {periodicBreakdown.map((row, idx) => {
+                const isActive = selectedGroupKey 
+                  ? selectedGroupKey === row.key 
+                  : idx === 0; // Default to first (latest) row if nothing selected
+
+                return (
+                  <tr 
+                    key={row.key} 
+                    onClick={() => setSelectedGroupKey(row.key)}
+                    className={cn(
+                      "font-medium cursor-pointer transition-colors",
+                      isActive ? "bg-primary/15 hover:bg-primary/20" : "hover:bg-muted/30"
+                    )}
+                  >
+                    <td className={cn(
+                      "p-2 font-bold border-r border-border sticky left-0 z-10",
+                      isActive ? "text-primary bg-primary/5" : "text-foreground bg-card"
+                    )}>
+                      {row.label}
+                    </td>
+                    <td className="p-2 border-r border-border text-right font-black text-emerald-500">₹{row.collection.toLocaleString("en-IN")}</td>
+                    <td className="p-2 border-r border-border text-right">₹{row.newAdm.toLocaleString("en-IN")}</td>
+                    <td className="p-2 border-r border-border text-right">₹{row.renew.toLocaleString("en-IN")}</td>
+                    <td className="p-2 border-r border-border text-right">₹{row.balance.toLocaleString("en-IN")}</td>
+                    <td className="p-2 border-r border-border text-right">₹{row.pt.toLocaleString("en-IN")}</td>
+                    <td className="p-2 border-r border-border text-center font-bold">{row.consultation}</td>
+                    <td className="p-2 border-r border-border text-center font-bold">{row.measurement}</td>
+                    <td className="p-2 border-r border-border text-right">₹{row.cash.toLocaleString("en-IN")}</td>
+                    <td className="p-2 border-r border-border text-right">₹{row.card.toLocaleString("en-IN")}</td>
+                    <td className="p-2 text-center font-bold">{row.count}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* 5. Daily Detail Ledger */}
+      {/* 5. Daily Detail Ledger (Filtered to Active Period) */}
       <div className="border border-border rounded-xl bg-card overflow-hidden shadow-sm">
         <div 
           onClick={() => setLedgerOpen((prev) => !prev)}
@@ -7224,7 +7265,7 @@ export function AppHeader() {
   const lock = useSecurityStore((s) => s.lock);
 
   const { logout } = useAuth();
-  const { exportBackup, importBackup } = useBackup();
+  const { exportBackup, triggerImportClick, importBackup, fileInputRef } = useBackup();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -7361,18 +7402,12 @@ export function AppHeader() {
                 <Download className="h-3.5 w-3.5 text-muted-foreground" />
                 Export JSON Backup
               </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <label className="cursor-pointer">
-                  <Upload className="h-3.5 w-3.5 text-muted-foreground" />
-                  Import JSON Backup
-                  <input
-                    type="file"
-                    accept=".json"
-                    onChange={importBackup}
-                    className="hidden"
-                  />
-                </label>
+
+              <DropdownMenuItem onSelect={triggerImportClick} className="cursor-pointer">
+                <Upload className="h-3.5 w-3.5 text-muted-foreground" />
+                Import JSON Backup
               </DropdownMenuItem>
+
               <DropdownMenuSeparator />
               <DropdownMenuItem danger onSelect={logout} className="cursor-pointer">
                 <LogOut className="h-3.5 w-3.5" />
@@ -7382,6 +7417,15 @@ export function AppHeader() {
           </DropdownMenu>
         </div>
       </div>
+
+      {/* Hidden file input mounted outside dropdown to prevent unmount canceling */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".json,application/json"
+        onChange={importBackup}
+        className="hidden"
+      />
     </header>
   );
 }

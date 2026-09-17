@@ -24,14 +24,13 @@ export function AppShell({ header, children }: AppShellProps) {
   }, []);
 
   return (
-    <div className="min-h-[100dvh] flex flex-col bg-background text-foreground overflow-x-hidden">
-      <div className="w-full">{header}</div>
-      <div className="flex-1">{children}</div>
+    <div className="min-h-[100dvh] flex flex-col bg-background text-foreground overflow-x-hidden relative">
+      <div className="w-full z-40">{header}</div>
+      <div className="flex-1 relative z-10">{children}</div>
 
       {isMobile && (
-        <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card/95 backdrop-blur-xl pb-[env(safe-area-inset-bottom)]">
+        <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border/80 bg-card/85 backdrop-blur-2xl pb-[env(safe-area-inset-bottom)] card-hardware">
           <div className="max-w-6xl mx-auto grid grid-cols-3 text-xs font-semibold text-muted-foreground">
-            {/* 1. Tasks & Scratchpad */}
             <button
               type="button"
               onClick={() => {
@@ -39,7 +38,7 @@ export function AppShell({ header, children }: AppShellProps) {
                 if (location.pathname !== "/dashboard") navigate("/dashboard");
               }}
               className={cn(
-                "flex flex-col items-center py-2.5 transition-colors cursor-pointer",
+                "flex flex-col items-center py-2.5 transition-all cursor-pointer active:scale-95",
                 activeTab === "tasks" ? "text-primary font-bold" : "hover:text-foreground",
               )}
             >
@@ -47,7 +46,6 @@ export function AppShell({ header, children }: AppShellProps) {
               <span>Tasks</span>
             </button>
 
-            {/* 2. Gym Report */}
             <button
               type="button"
               onClick={() => {
@@ -55,7 +53,7 @@ export function AppShell({ header, children }: AppShellProps) {
                 if (location.pathname !== "/dashboard") navigate("/dashboard");
               }}
               className={cn(
-                "flex flex-col items-center py-2.5 transition-colors cursor-pointer",
+                "flex flex-col items-center py-2.5 transition-all cursor-pointer active:scale-95",
                 activeTab === "reports" ? "text-primary font-bold" : "hover:text-foreground",
               )}
             >
@@ -63,7 +61,6 @@ export function AppShell({ header, children }: AppShellProps) {
               <span>Gym Report</span>
             </button>
 
-            {/* 3. Resources */}
             <button
               type="button"
               onClick={() => {
@@ -71,7 +68,7 @@ export function AppShell({ header, children }: AppShellProps) {
                 if (location.pathname !== "/dashboard") navigate("/dashboard");
               }}
               className={cn(
-                "flex flex-col items-center py-2.5 transition-colors cursor-pointer",
+                "flex flex-col items-center py-2.5 transition-all cursor-pointer active:scale-95",
                 activeTab === "launchpad" ? "text-primary font-bold" : "hover:text-foreground",
               )}
             >

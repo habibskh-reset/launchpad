@@ -11,10 +11,10 @@ import {
   Trash2, 
   FileText, 
   Pin, 
-  Edit3,
-  Bell,
-  Eye,
-  Clock
+  Edit3, 
+  Bell, 
+  Eye, 
+  Clock 
 } from "lucide-react";
 import { useTasks } from "./useTasks";
 import { useNotes } from "@/pages/Notes/useNotes";
@@ -32,13 +32,13 @@ import type { NoteItem } from "@/pages/Notes/notes.types";
 type ViewMode = "today" | "thisWeek" | "nextWeek";
 
 const PRIORITIES: { id: TaskPriority; label: string; activeStyle: string }[] = [
-  { id: "low", label: "Low", activeStyle: "bg-emerald-500 text-white font-bold" },
-  { id: "medium", label: "Med", activeStyle: "bg-amber-500 text-slate-950 font-bold" },
-  { id: "high", label: "High", activeStyle: "bg-rose-500 text-white font-bold" },
+  { id: "low", label: "Low", activeStyle: "bg-emerald-500 text-white font-bold shadow-sm shadow-emerald-500/20" },
+  { id: "medium", label: "Med", activeStyle: "bg-amber-500 text-slate-950 font-bold shadow-sm shadow-amber-500/20" },
+  { id: "high", label: "High", activeStyle: "bg-rose-500 text-white font-bold shadow-sm shadow-rose-500/20" },
 ];
 
 const NOTE_COLORS: Record<string, { bg: string; border: string }> = {
-  default: { bg: "bg-card/80", border: "border-border" },
+  default: { bg: "bg-card/90", border: "border-border/80" },
   amber: { bg: "bg-amber-500/10", border: "border-amber-500/30" },
   emerald: { bg: "bg-emerald-500/10", border: "border-emerald-500/30" },
   violet: { bg: "bg-violet-500/10", border: "border-violet-500/30" },
@@ -70,12 +70,10 @@ export function TasksPage({ searchTerm = "" }: { searchTerm?: string }) {
   const [priority, setPriority] = useState<TaskPriority>("medium");
   const [editingTask, setEditingTask] = useState<TodoItem | null>(null);
 
-  // Quick Input Reminder fields
   const [showReminderOptions, setShowReminderOptions] = useState(false);
   const [quickTime, setQuickTime] = useState("09:00");
   const [quickReminder, setQuickReminder] = useState(false);
 
-  // Notes Modal state
   const [noteModalOpen, setNoteModalOpen] = useState(false);
   const [noteViewOpen, setNoteViewOpen] = useState(false);
   const [activeNote, setActiveNote] = useState<NoteItem | null>(null);
@@ -150,9 +148,9 @@ export function TasksPage({ searchTerm = "" }: { searchTerm?: string }) {
   return (
     <div className="flex flex-col gap-5 max-w-6xl mx-auto w-full pb-16">
       {/* Top Header Card */}
-      <div className="rounded-2xl border border-border bg-card/70 backdrop-blur-xl p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="rounded-2xl border border-border/70 bg-card/80 backdrop-blur-xl p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 card-hardware">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-primary/10 text-primary flex items-center justify-center font-bold flex-shrink-0">
+          <div className="w-10 h-10 rounded-2xl bg-primary/10 text-primary flex items-center justify-center font-bold flex-shrink-0 shadow-inner">
             {mode === "today" ? <Calendar className="h-5 w-5" /> : <ListTodo className="h-5 w-5" />}
           </div>
           <div>
@@ -160,11 +158,11 @@ export function TasksPage({ searchTerm = "" }: { searchTerm?: string }) {
               <h2 className="font-bold text-sm text-foreground">
                 {mode === "today" ? "Today's Agenda" : mode === "thisWeek" ? "This Week" : "Next Week"}
               </h2>
-              <span className="text-[11px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-semibold">
+              <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-primary/10 text-primary font-semibold border border-primary/20 font-mono">
                 {dateBadge}
               </span>
             </div>
-            <p className="text-xs text-muted-foreground mt-0.5">
+            <p className="text-xs text-muted-foreground mt-0.5 tabular-nums">
               {totalCount === 0
                 ? "No tasks scheduled."
                 : `${completedCount} of ${totalCount} completed (${Math.round(
@@ -174,13 +172,13 @@ export function TasksPage({ searchTerm = "" }: { searchTerm?: string }) {
           </div>
         </div>
 
-        <div className="flex rounded-xl bg-muted p-1 text-xs font-semibold gap-1 self-start sm:self-auto">
+        <div className="flex rounded-xl bg-muted/60 p-1 text-xs font-semibold gap-1 self-start sm:self-auto border border-border/50">
           <button
             type="button"
             onClick={() => setMode("today")}
             className={cn(
-              "px-3 py-1 rounded-lg transition-all cursor-pointer",
-              mode === "today" ? "bg-background text-foreground shadow-sm font-bold" : "text-muted-foreground",
+              "px-3.5 py-1.5 rounded-lg transition-all cursor-pointer active:scale-95",
+              mode === "today" ? "bg-background text-foreground shadow-sm font-bold" : "text-muted-foreground hover:text-foreground",
             )}
           >
             Today
@@ -189,8 +187,8 @@ export function TasksPage({ searchTerm = "" }: { searchTerm?: string }) {
             type="button"
             onClick={() => setMode("thisWeek")}
             className={cn(
-              "px-3 py-1 rounded-lg transition-all cursor-pointer",
-              mode === "thisWeek" ? "bg-background text-foreground shadow-sm font-bold" : "text-muted-foreground",
+              "px-3.5 py-1.5 rounded-lg transition-all cursor-pointer active:scale-95",
+              mode === "thisWeek" ? "bg-background text-foreground shadow-sm font-bold" : "text-muted-foreground hover:text-foreground",
             )}
           >
             This Week
@@ -199,8 +197,8 @@ export function TasksPage({ searchTerm = "" }: { searchTerm?: string }) {
             type="button"
             onClick={() => setMode("nextWeek")}
             className={cn(
-              "px-3 py-1 rounded-lg transition-all cursor-pointer",
-              mode === "nextWeek" ? "bg-background text-foreground shadow-sm font-bold" : "text-muted-foreground",
+              "px-3.5 py-1.5 rounded-lg transition-all cursor-pointer active:scale-95",
+              mode === "nextWeek" ? "bg-background text-foreground shadow-sm font-bold" : "text-muted-foreground hover:text-foreground",
             )}
           >
             Next Week
@@ -208,20 +206,19 @@ export function TasksPage({ searchTerm = "" }: { searchTerm?: string }) {
         </div>
       </div>
 
-      {/* 2-Column Responsive Layout */}
+      {/* Main Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
         {/* Left Side: Tasks (7 cols) */}
-        <div className="lg:col-span-7 flex flex-col rounded-2xl border border-border bg-card/70 backdrop-blur-xl shadow-sm overflow-hidden">
-          <form onSubmit={handleAddTask} className="p-3 border-b border-border bg-background/50 flex flex-col gap-2">
+        <div className="lg:col-span-7 flex flex-col rounded-2xl border border-border/70 bg-card/85 backdrop-blur-xl shadow-sm overflow-hidden card-hardware">
+          <form onSubmit={handleAddTask} className="p-3.5 border-b border-border/60 bg-background/40 flex flex-col gap-2.5">
             <div className="flex items-center gap-2">
               <Input
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 placeholder={`Add task to ${mode === "today" ? "Today" : mode === "thisWeek" ? "This Week" : "Next Week"}...`}
-                className="h-10 bg-card border-border rounded-xl text-xs sm:text-sm font-medium focus-visible:ring-primary"
+                className="h-10 bg-card border-border/80 rounded-xl text-xs sm:text-sm font-medium focus-visible:ring-primary/30"
               />
               
-              {/* Priority Selectors */}
               <div className="flex items-center gap-1">
                 {PRIORITIES.map((p) => (
                   <button
@@ -229,8 +226,8 @@ export function TasksPage({ searchTerm = "" }: { searchTerm?: string }) {
                     type="button"
                     onClick={() => setPriority(p.id)}
                     className={cn(
-                      "px-2.5 py-1.5 rounded-lg text-[10px] font-semibold border transition-all cursor-pointer",
-                      priority === p.id ? p.activeStyle : "border-border bg-card text-muted-foreground",
+                      "px-2.5 py-2 rounded-lg text-[10px] font-semibold border transition-all cursor-pointer active:scale-95",
+                      priority === p.id ? p.activeStyle : "border-border/60 bg-card text-muted-foreground hover:text-foreground",
                     )}
                   >
                     {p.label}
@@ -238,7 +235,6 @@ export function TasksPage({ searchTerm = "" }: { searchTerm?: string }) {
                 ))}
               </div>
 
-              {/* Quick Reminder Toggle Button */}
               <button
                 type="button"
                 onClick={() => {
@@ -246,10 +242,10 @@ export function TasksPage({ searchTerm = "" }: { searchTerm?: string }) {
                   if (!showReminderOptions) setQuickReminder(true);
                 }}
                 className={cn(
-                  "h-10 px-2.5 rounded-xl border flex items-center gap-1 text-xs transition-colors cursor-pointer shrink-0",
-                  quickReminder ? "bg-amber-500/10 border-amber-500/40 text-amber-500 font-bold" : "border-border bg-card text-muted-foreground hover:text-foreground"
+                  "h-10 px-2.5 rounded-xl border flex items-center gap-1 text-xs transition-all cursor-pointer shrink-0 active:scale-95",
+                  quickReminder ? "bg-amber-500/15 border-amber-500/40 text-amber-500 font-bold" : "border-border/80 bg-card text-muted-foreground hover:text-foreground"
                 )}
-                title="Configure reminder for this task"
+                title="Configure reminder"
               >
                 <Bell className="h-4 w-4" />
               </button>
@@ -258,15 +254,14 @@ export function TasksPage({ searchTerm = "" }: { searchTerm?: string }) {
                 type="submit"
                 size="sm"
                 disabled={!draft.trim()}
-                className="h-10 px-4 rounded-xl font-bold bg-primary text-primary-foreground shrink-0 shadow-sm cursor-pointer"
+                className="h-10 px-4 rounded-xl font-bold bg-primary text-primary-foreground shrink-0 shadow-md shadow-primary/20 transition-all active:scale-95 cursor-pointer"
               >
-                <Plus className="h-4 w-4" />
+                <Plus className="h-4 w-4 stroke-[3]" />
               </Button>
             </div>
 
-            {/* Quick Reminder Bar Drawer */}
             {showReminderOptions && (
-              <div className="flex items-center justify-between p-2 rounded-xl bg-card border border-border text-xs animate-in fade-in-50">
+              <div className="flex items-center justify-between p-2.5 rounded-xl bg-card border border-border/70 text-xs shadow-inner">
                 <div className="flex items-center gap-2">
                   <Clock className="h-3.5 w-3.5 text-primary" />
                   <span className="font-semibold text-[11px]">Reminder Time:</span>
@@ -274,7 +269,7 @@ export function TasksPage({ searchTerm = "" }: { searchTerm?: string }) {
                     type="time"
                     value={quickTime}
                     onChange={(e) => setQuickTime(e.target.value)}
-                    className="h-7 px-2 rounded-md bg-background border border-input text-xs font-mono"
+                    className="h-7 px-2 rounded-md bg-background border border-input text-xs font-mono outline-none"
                   />
                 </div>
                 <div className="flex items-center gap-2">
@@ -290,7 +285,7 @@ export function TasksPage({ searchTerm = "" }: { searchTerm?: string }) {
                   <button
                     type="button"
                     onClick={() => setShowReminderOptions(false)}
-                    className="text-[10px] text-muted-foreground hover:text-foreground underline ml-2"
+                    className="text-[10px] text-muted-foreground hover:text-foreground underline ml-2 cursor-pointer"
                   >
                     Hide
                   </button>
@@ -301,16 +296,16 @@ export function TasksPage({ searchTerm = "" }: { searchTerm?: string }) {
 
           <ul className="p-3 space-y-2 max-h-[520px] overflow-y-auto">
             {activeTasks.length === 0 ? (
-              <li className="py-12 text-center text-xs text-muted-foreground flex flex-col items-center gap-1">
-                <CheckCircle2 className="h-6 w-6 text-muted-foreground/30 mb-1" />
-                <span>No tasks in this view. Type above to add one.</span>
+              <li className="py-14 text-center text-xs text-muted-foreground flex flex-col items-center gap-1.5">
+                <CheckCircle2 className="h-7 w-7 text-muted-foreground/20" />
+                <span>All caught up! Zero tasks in this view.</span>
               </li>
             ) : (
               activeTasks.map((task) => (
                 <li
                   key={task.id}
                   className={cn(
-                    "group flex items-center justify-between gap-3 p-2.5 rounded-xl border border-border bg-card/80 hover:border-primary/40 transition-all shadow-sm",
+                    "group flex items-center justify-between gap-3 p-2.5 rounded-xl border border-border/70 bg-card/70 hover:border-primary/40 transition-all shadow-sm active:scale-[0.99]",
                     task.done && "opacity-50 bg-muted/20 border-transparent",
                   )}
                 >
@@ -319,9 +314,9 @@ export function TasksPage({ searchTerm = "" }: { searchTerm?: string }) {
                       type="button"
                       onClick={() => toggle(task.id)}
                       className={cn(
-                        "w-5 h-5 rounded-lg border flex items-center justify-center flex-shrink-0 transition-colors cursor-pointer",
+                        "w-5 h-5 rounded-lg border flex items-center justify-center flex-shrink-0 transition-all cursor-pointer",
                         task.done
-                          ? "bg-emerald-500 border-emerald-500 text-white"
+                          ? "bg-emerald-500 border-emerald-500 text-white shadow-sm shadow-emerald-500/20"
                           : "border-muted-foreground/40 hover:border-primary bg-background",
                       )}
                     >
@@ -339,12 +334,11 @@ export function TasksPage({ searchTerm = "" }: { searchTerm?: string }) {
                       {task.reminder && (
                         <span
                           className={cn(
-                            "flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md font-semibold shrink-0",
+                            "flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md font-semibold shrink-0 font-mono border",
                             task.reminderStatus === "triggered"
-                              ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
-                              : "bg-primary/10 text-primary"
+                              ? "bg-amber-500/15 text-amber-600 border-amber-500/30"
+                              : "bg-primary/10 text-primary border-primary/20"
                           )}
-                          title={task.reminderOffset ? `${task.reminderOffset}m before` : "At due time"}
                         >
                           <Bell className="h-3 w-3" />
                           <span>{task.dueTime || "09:00"}</span>
@@ -353,13 +347,13 @@ export function TasksPage({ searchTerm = "" }: { searchTerm?: string }) {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                  <div className="flex items-center gap-1 opacity-70 group-hover:opacity-100 transition-opacity">
                     {!task.done && (
                       <button
                         type="button"
                         onClick={() => setEditingTask(task)}
                         className="p-1 text-muted-foreground hover:text-foreground cursor-pointer"
-                        title="Edit task & reminder"
+                        title="Edit task"
                       >
                         <Pencil className="h-3 w-3" />
                       </button>
@@ -381,7 +375,7 @@ export function TasksPage({ searchTerm = "" }: { searchTerm?: string }) {
                         type="button"
                         onClick={() => moveToThisWeek(task.id)}
                         className="p-1 text-muted-foreground hover:text-emerald-500 cursor-pointer"
-                        title="Move to Current Week / Today"
+                        title="Move to Current Week"
                       >
                         <ArrowLeft className="h-3 w-3" />
                       </button>
@@ -402,7 +396,7 @@ export function TasksPage({ searchTerm = "" }: { searchTerm?: string }) {
           </ul>
         </div>
 
-        {/* Right Side: Scratchpad Notes (5 cols) */}
+        {/* Right Side: Scratchpad (5 cols) */}
         <div className="lg:col-span-5 flex flex-col gap-3">
           <div className="flex items-center justify-between px-1">
             <div className="flex items-center gap-2">
@@ -417,7 +411,7 @@ export function TasksPage({ searchTerm = "" }: { searchTerm?: string }) {
                 setActiveNote(null);
                 setNoteModalOpen(true);
               }}
-              className="rounded-xl font-bold text-xs cursor-pointer h-8"
+              className="rounded-xl font-bold text-xs cursor-pointer h-8 bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm active:scale-95"
             >
               <Plus className="h-3.5 w-3.5 mr-1" /> New Note
             </Button>
@@ -425,8 +419,8 @@ export function TasksPage({ searchTerm = "" }: { searchTerm?: string }) {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-2.5 max-h-[520px] overflow-y-auto pr-1">
             {filteredNotes.length === 0 ? (
-              <div className="p-8 text-center text-xs text-muted-foreground border border-dashed border-border rounded-2xl bg-card/40">
-                No notes captured yet. Click "+ New Note" to save thoughts, links, or ideas.
+              <div className="p-10 text-center text-xs text-muted-foreground border border-dashed border-border/80 rounded-2xl bg-card/40">
+                No notes captured yet. Click "+ New Note" to write ideas, formulas, or draft scripts.
               </div>
             ) : (
               filteredNotes.map((note) => {
@@ -435,7 +429,7 @@ export function TasksPage({ searchTerm = "" }: { searchTerm?: string }) {
                   <div
                     key={note.id}
                     className={cn(
-                      "group rounded-2xl border p-3.5 flex flex-col justify-between transition-all shadow-sm cursor-pointer hover:border-primary/40",
+                      "group rounded-2xl border p-4 flex flex-col justify-between transition-all shadow-sm cursor-pointer hover:border-primary/50 card-hardware active:scale-[0.99]",
                       color.bg,
                       color.border,
                     )}
@@ -446,7 +440,7 @@ export function TasksPage({ searchTerm = "" }: { searchTerm?: string }) {
                   >
                     <div>
                       <div className="flex items-start justify-between gap-2 mb-1.5">
-                        <h4 className="font-bold text-xs text-foreground line-clamp-1">
+                        <h4 className="font-bold text-xs text-foreground line-clamp-1 group-hover:text-primary transition-colors">
                           {note.title}
                         </h4>
                         <button
@@ -463,13 +457,13 @@ export function TasksPage({ searchTerm = "" }: { searchTerm?: string }) {
                           <Pin className="h-3 w-3" fill={note.pinned ? "currentColor" : "none"} />
                         </button>
                       </div>
-                      <p className="text-xs text-muted-foreground whitespace-pre-wrap line-clamp-4 leading-relaxed font-medium">
+                      <p className="text-xs text-muted-foreground whitespace-pre-wrap line-clamp-4 leading-relaxed font-sans">
                         {note.content}
                       </p>
                     </div>
 
                     <div 
-                      className="pt-3 flex items-center justify-between border-t border-border/40 mt-3 text-[10px] text-muted-foreground"
+                      className="pt-3 flex items-center justify-between border-t border-border/40 mt-3 text-[10px] text-muted-foreground font-mono"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <span>{new Date(note.updatedAt).toLocaleDateString()}</span>
@@ -481,7 +475,7 @@ export function TasksPage({ searchTerm = "" }: { searchTerm?: string }) {
                             setActiveNote(note);
                             setNoteViewOpen(true);
                           }}
-                          className="px-2 py-0.5 rounded bg-muted/80 hover:bg-muted text-foreground transition-colors flex items-center gap-1 font-medium text-[10px]"
+                          className="px-2 py-0.5 rounded-lg bg-muted hover:bg-muted/80 text-foreground transition-colors flex items-center gap-1 font-medium text-[10px]"
                           title="View"
                         >
                           <Eye className="h-3 w-3" />
@@ -493,7 +487,7 @@ export function TasksPage({ searchTerm = "" }: { searchTerm?: string }) {
                             setActiveNote(note);
                             setNoteModalOpen(true);
                           }}
-                          className="px-2 py-0.5 rounded bg-muted/80 hover:bg-muted text-foreground transition-colors flex items-center gap-1 font-medium text-[10px]"
+                          className="px-2 py-0.5 rounded-lg bg-muted hover:bg-muted/80 text-foreground transition-colors flex items-center gap-1 font-medium text-[10px]"
                           title="Edit"
                         >
                           <Edit3 className="h-3 w-3" />
@@ -502,7 +496,7 @@ export function TasksPage({ searchTerm = "" }: { searchTerm?: string }) {
                         <button
                           type="button"
                           onClick={() => handleDeleteNote(note)}
-                          className="p-1 rounded hover:bg-destructive/10 text-destructive/70 hover:text-destructive cursor-pointer ml-1"
+                          className="p-1 rounded-lg hover:bg-destructive/10 text-destructive/70 hover:text-destructive cursor-pointer ml-1"
                           title="Delete"
                         >
                           <Trash2 className="h-3 w-3" />
