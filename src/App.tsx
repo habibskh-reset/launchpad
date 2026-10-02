@@ -7,6 +7,8 @@ import { AppShell } from "@/app/AppShell";
 import { QuickCaptureModal } from "@/components/layout/QuickCaptureModal";
 import { PasscodeOverlay } from "@/components/auth/PasscodeOverlay";
 import { useUIStore } from "@/stores/uiStore";
+import { useSecurityStore } from "@/stores/securityStore";
+import { initAudioContext } from "@/lib/audio";
 
 export function App() {
   useWorkspaceSync();
@@ -15,8 +17,13 @@ export function App() {
   const captureOpen = useUIStore((s) => s.captureModalOpen);
   const openCaptureModal = useUIStore((s) => s.openCaptureModal);
   const closeCaptureModal = useUIStore((s) => s.closeCaptureModal);
+  const isLocked = useSecurityStore((s) => s.isLocked);
 
   useEffect(() => {
+    // Initialize AudioContext on first interaction to avoid autoplay blocks
+    window.addEventListener("pointerdown", initAudioContext, { once: true });
+    window.addEventListener("keydown", initAudioContext, { once: true });
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
@@ -33,13 +40,19 @@ export function App() {
     }
   };
 
+  // FIXED: Hide the header menu completely when locked to prevent bypasses
   return (
-    <AppShell header={<AppHeader />}>
-      <Outlet />
-      <QuickCaptureModal
-        open={captureOpen}
-        onOpenChange={handleOpenChange}
-      />
+    <AppShell header={!isLocked ? <AppHeader /> : null}>
+      {/* DOM UNMOUNT: Fully hide secure children when passcode overlay is active */}
+      {!isLocked && <Outlet />}
+      
+      {!isLocked && (
+        <QuickCaptureModal
+          open={captureOpen}
+          onOpenChange={handleOpenChange}
+        />
+      )}
+      
       <PasscodeOverlay />
     </AppShell>
   );

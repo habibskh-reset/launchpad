@@ -6,9 +6,16 @@ const STORAGE_KEY = "theme";
 type Theme = "light" | "dark";
 
 function getInitialTheme(): Theme {
-  if (typeof window === "undefined") return "dark";
+  if (typeof window === "undefined") return "light";
   const stored = localStorage.getItem(STORAGE_KEY);
-  return stored === "light" ? "light" : "dark";
+  
+  // Force default to light if no explicit preference exists
+  if (!stored) {
+    localStorage.setItem(STORAGE_KEY, "light");
+    return "light";
+  }
+  
+  return stored === "dark" ? "dark" : "light";
 }
 
 function applyTheme(theme: Theme) {

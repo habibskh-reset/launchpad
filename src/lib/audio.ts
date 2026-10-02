@@ -1,12 +1,30 @@
+let globalAudioCtx: AudioContext | null = null;
+
+export function initAudioContext(): void {
+  if (globalAudioCtx) return;
+  try {
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (AudioContextClass) {
+      globalAudioCtx = new AudioContextClass();
+      if (globalAudioCtx.state === 'suspended') {
+        globalAudioCtx.resume();
+      }
+    }
+  } catch {
+    // Suppressed
+  }
+}
+
 export function playReminderChime(): void {
   try {
-    const AudioContextClass =
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext: typeof AudioContext })
-        .webkitAudioContext;
-    if (!AudioContextClass) return;
+    if (!globalAudioCtx) initAudioContext();
+    const ctx = globalAudioCtx;
+    if (!ctx) return;
+    
+    if (ctx.state === 'suspended') {
+      ctx.resume();
+    }
 
-    const ctx = new AudioContextClass();
     const now = ctx.currentTime;
 
     const playTone = (freq: number, start: number, duration: number) => {
@@ -31,10 +49,7 @@ export function playReminderChime(): void {
     playTone(880, now, 0.18);
     playTone(1320, now + 0.15, 0.35);
 
-    setTimeout(() => {
-      void ctx.close();
-    }, 1000);
   } catch {
-    // Suppressed if browser audio context is blocked prior to user interaction
+    // Suppressed if blocked by policy
   }
 }

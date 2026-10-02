@@ -1,3 +1,8 @@
+function parseLocalDate(dateStr: string): Date {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
 export function getTodayDate(now: Date = new Date()): string {
   const y = now.getFullYear();
   const m = String(now.getMonth() + 1).padStart(2, "0");
@@ -26,7 +31,7 @@ export function getWeekEnd(now: Date = new Date()): string {
 }
 
 export function addDays(dateStr: string, days: number): string {
-  const d = new Date(`${dateStr}T00:00:00`);
+  const d = parseLocalDate(dateStr);
   d.setDate(d.getDate() + days);
   return getTodayDate(d);
 }
@@ -40,7 +45,7 @@ export function formatDateLabel(date: Date = new Date()): string {
 }
 
 export function formatWeekday(dateStr: string): string {
-  const d = new Date(`${dateStr}T00:00:00`);
+  const d = parseLocalDate(dateStr);
   if (Number.isNaN(d.getTime())) return dateStr;
   return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
 }

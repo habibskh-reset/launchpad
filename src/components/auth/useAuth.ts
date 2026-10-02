@@ -43,9 +43,17 @@ export function useAuth() {
 
   const logout = async () => {
     setAuthError(null);
+    
+    // Rigorous wipe of all associated storage caches
     try {
       localStorage.removeItem(LOCAL_USER_KEY);
+      for (const key of Object.keys(localStorage)) {
+        if (key.startsWith("launchpad_workspace:")) {
+          localStorage.removeItem(key);
+        }
+      }
     } catch {}
+
     try {
       await signOutCurrent();
     } catch (error) {

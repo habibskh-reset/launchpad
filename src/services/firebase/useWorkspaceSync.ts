@@ -4,18 +4,9 @@ import {
   subscribeWorkspace,
   normalizeWorkspace,
 } from "@/services/firebase/workspace";
-import {
-  formatAppError,
-  toAppError,
-} from "@/shared/api/errors";
-import {
-  useWorkspaceStore,
-  selectWorkspace,
-} from "@/stores/workspaceStore";
-import {
-  cloneDefaultWorkspace,
-  type Workspace,
-} from "@/types/workspace";
+import { formatAppError, toAppError } from "@/shared/api/errors";
+import { useWorkspaceStore, selectWorkspace } from "@/stores/workspaceStore";
+import { cloneDefaultWorkspace, type Workspace } from "@/types/workspace";
 
 const LOCAL_STORAGE_PREFIX = "launchpad_workspace";
 
@@ -24,25 +15,43 @@ function getStorageKey(userId: string): string {
 }
 
 function isWorkspace(value: unknown): value is Workspace {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
+  if (!value || typeof value !== "object") return false;
   const workspace = value as Partial<Workspace>;
   return Array.isArray(workspace.columns) && Array.isArray(workspace.links);
 }
 
-function fingerprint(workspace: Workspace): string {
-  return JSON.stringify(workspace);
+// Cybr53 - highly performant local hashing
+const cyrb53 = (str: string, seed = 0) => {
+  let h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed;
+  for (let i = 0, ch; i < str.length; i++) {
+    ch = str.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return 4294967296 * (2097151 & h2) + (h1 >>> 0);
+};
+
+function fingerprint(w: Workspace): string {
+  // Ultra-fast fingerprint evaluating subset IDs and state instead of full textual stringification
+  const parts = [
+    w.settings.title,
+    w.columns.map(c => c.id).join(''),
+    w.links.map(l => l.id + l.columnId + (l.pinned ? 'p' : '')).join(''),
+    w.todos.map(t => t.id + t.done + t.dueDate).join(''),
+    w.notes?.map(n => n.id + n.updatedAt).join('') || '',
+    w.reports?.map(r => r.id + r.sortTimestamp).join('') || ''
+  ];
+  return cyrb53(parts.join('|')).toString();
 }
 
 function loadLocalWorkspace(userId: string): Workspace | null {
   try {
     const raw = localStorage.getItem(getStorageKey(userId));
     if (!raw) return null;
-
     const parsed: unknown = JSON.parse(raw);
     if (!isWorkspace(parsed)) return null;
-
     return normalizeWorkspace(parsed);
   } catch {
     return null;
@@ -76,10 +85,7 @@ export function useWorkspaceSync() {
       remoteReady.current = false;
 
       setWorkspace(cloneDefaultWorkspace());
-      setSync({
-        status: "offline",
-        message: "Signed Out",
-      });
+      setSync({ status: "offline", message: "Signed Out" });
       return;
     }
 
@@ -92,15 +98,9 @@ export function useWorkspaceSync() {
     setWorkspace(cached ?? cloneDefaultWorkspace());
 
     if (user.uid === "local") {
-      setSync({
-        status: "active",
-        message: "Saved Locally",
-      });
+      setSync({ status: "active", message: "Saved Locally" });
     } else {
-      setSync({
-        status: "offline",
-        message: "Connecting...",
-      });
+      setSync({ status: "offline", message: "Connecting..." });
     }
   }, [user?.uid, setWorkspace, setSync]);
 
@@ -113,10 +113,7 @@ export function useWorkspaceSync() {
       onReady: () => {
         if (activeUserId.current !== userId) return;
         remoteReady.current = true;
-        setSync({
-          status: "active",
-          message: "Synced with Cloud",
-        });
+        setSync({ status: "active", message: "Synced with Cloud" });
       },
       onData: (remoteWorkspace) => {
         if (activeUserId.current !== userId) return;
@@ -130,10 +127,7 @@ export function useWorkspaceSync() {
         setWorkspace(normalized);
         saveLocalWorkspace(userId, normalized);
 
-        setSync({
-          status: "active",
-          message: "Synced with Cloud",
-        });
+        setSync({ status: "active", message: "Synced with Cloud" });
       },
       onError: (error) => {
         if (activeUserId.current !== userId) return;
@@ -156,10 +150,7 @@ export function useWorkspaceSync() {
     saveLocalWorkspace(userId, workspace);
 
     if (userId === "local") {
-      setSync({
-        status: "active",
-        message: "Saved Locally",
-      });
+      setSync({ status: "active", message: "Saved Locally" });
       return;
     }
 
@@ -171,26 +162,18 @@ export function useWorkspaceSync() {
       return;
     }
 
-    if (currentFingerprint === lastRemoteFingerprint.current) {
-      return;
-    }
+    if (currentFingerprint === lastRemoteFingerprint.current) return;
 
     const timeoutId = window.setTimeout(() => {
       if (activeUserId.current !== userId) return;
 
-      setSync({
-        status: "offline",
-        message: "Saving...",
-      });
+      setSync({ status: "offline", message: "Saving..." });
 
       persistWorkspace(userId, workspace)
         .then(() => {
           if (activeUserId.current !== userId) return;
           lastRemoteFingerprint.current = currentFingerprint;
-          setSync({
-            status: "active",
-            message: "Synced with Cloud",
-          });
+          setSync({ status: "active", message: "Synced with Cloud" });
         })
         .catch((error) => {
           if (activeUserId.current !== userId) return;

@@ -1,9 +1,8 @@
 export interface StoredReport {
   id: string;
-  date: string; // "01-09-2026"
-  dayName: string; // "Tuesday"
+  date: string; 
+  dayName: string; 
   sortTimestamp: number;
-  // Collection From breakdown
   newCount: number;
   newAmount: number;
   renewCount: number;
@@ -14,14 +13,11 @@ export interface StoredReport {
   ptAmount: number;
   otherCount: number;
   otherAmount: number;
-  // Progress & Assessments
   consultation: number;
   measurement: number;
-  // Follow-ups (Done / Completed only)
   enquiryCompleted: number;
   paymentCompleted: number;
   expiryCompleted: number;
-  // Cash Flow & Footfall
   cashTotal: number;
   cardTotal: number;
   todayCollection: number;
@@ -43,13 +39,13 @@ export const DAY_NAMES = [
 export function safeInt(val: string | undefined | null): number {
   if (!val) return 0;
   const cleaned = String(val).replace(/,/g, "").trim();
-  const parsed = parseInt(cleaned, 10);
+  const parsed = parseFloat(cleaned);
   return isNaN(parsed) ? 0 : parsed;
 }
 
 function extractCountAndAmount(line: string): { count: number; amount: number } {
   const countM = line.match(/Count\s*[:=-]?\s*(\d+)/i);
-  const amtM = line.match(/Amount\s*[:=-]?\s*([\d,]+)/i);
+  const amtM = line.match(/Amount\s*[:=-]?\s*([\d,.]+)/i);
   return {
     count: countM ? safeInt(countM[1]) : 0,
     amount: amtM ? safeInt(amtM[1]) : 0,
@@ -91,37 +87,31 @@ export function parseGNReportText(text: string): Omit<StoredReport, "id" | "sort
     for (const line of lines) {
       const trimmed = line.trim();
 
-      // PT (Personal Training) - broad boundary match
       if (/(?:^|[-*•\s])\s*(?:PT|P\.T\.?|Personal\s*Training)\b/i.test(trimmed)) {
         const { count, amount } = extractCountAndAmount(trimmed);
         ptCount = count;
         ptAmount = amount;
       }
-      // Renewals
       else if (/(?:^|[-*•\s])\s*(?:Renew|Renewal)\b/i.test(trimmed)) {
         const { count, amount } = extractCountAndAmount(trimmed);
         renewCount = count;
         renewAmount = amount;
       }
-      // New Admissions
       else if (/(?:^|[-*•\s])\s*(?:New|Fresh)\b/i.test(trimmed)) {
         const { count, amount } = extractCountAndAmount(trimmed);
         newCount = count;
         newAmount = amount;
       }
-      // Balance
       else if (/(?:^|[-*•\s])\s*Balance\b/i.test(trimmed)) {
         const { count, amount } = extractCountAndAmount(trimmed);
         balanceCount = count;
         balanceAmount = amount;
       }
-      // Others
       else if (/(?:^|[-*•\s])\s*Other(?:s)?\b/i.test(trimmed)) {
         const { count, amount } = extractCountAndAmount(trimmed);
         otherCount = count;
         otherAmount = amount;
       }
-      // Assessments
       else if (/Consultation/i.test(trimmed)) {
         const m = trimmed.match(/Count\s*[:=-]?\s*(\d+)/i);
         if (m) consultation = safeInt(m[1]);
@@ -129,7 +119,6 @@ export function parseGNReportText(text: string): Omit<StoredReport, "id" | "sort
         const m = trimmed.match(/Count\s*[:=-]?\s*(\d+)/i);
         if (m) measurement = safeInt(m[1]);
       }
-      // Follow-ups (Completed / Done count only)
       else if (/Enquiry/i.test(trimmed)) {
         const compM = trimmed.match(/Completed\s*[:=-]?\s*(\d+)/i);
         if (compM) enquiryCompleted = safeInt(compM[1]);
@@ -142,17 +131,16 @@ export function parseGNReportText(text: string): Omit<StoredReport, "id" | "sort
       }
     }
 
-    const cashMatch = text.match(/Cash\s*Total\s*[:=-]?\s*([\d,]+)/i);
-    const cardMatch = text.match(/Card\s*Total\s*[:=-]?\s*([\d,]+)/i);
-    const todayCollMatch = text.match(/Today\s*Collection\s*[:=-]?\s*([\d,]+)/i);
-    const availCashMatch = text.match(/Available\s*Cash\s*[:=-]?\s*([\d,]+)/i);
+    const cashMatch = text.match(/Cash\s*Total\s*[:=-]?\s*([\d,.]+)/i);
+    const cardMatch = text.match(/Card\s*Total\s*[:=-]?\s*([\d,.]+)/i);
+    const todayCollMatch = text.match(/Today\s*Collection\s*[:=-]?\s*([\d,.]+)/i);
+    const availCashMatch = text.match(/Available\s*Cash\s*[:=-]?\s*([\d,.]+)/i);
     const attMatch = text.match(/Attendance\s*[:=-]?\s*(\d+)/i);
 
     const cashTotal = safeInt(cashMatch?.[1]);
     const cardTotal = safeInt(cardMatch?.[1]);
     const todayCollection = todayCollMatch ? safeInt(todayCollMatch[1]) : cashTotal + cardTotal;
 
-    // Auto-detect PT if omitted or missed in formatted line but present in collection difference
     const knownSum = newAmount + renewAmount + balanceAmount + otherAmount;
     if (ptAmount === 0 && todayCollection > knownSum) {
       ptAmount = todayCollection - knownSum;

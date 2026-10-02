@@ -1,30 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { createId } from "@/lib/id";
 import { useWorkspaceStore, selectTodos } from "@/stores/workspaceStore";
 import { addDays, getTodayDate, getWeekEnd, getWeekStart } from "@/lib/date";
-import { dispatchTaskNotification, isNotificationSupported } from "@/services/notifications";
 import type { TodoItem, TaskPriority, ReminderStatus } from "@/types/workspace";
-
-export async function ensureReminderPermission(): Promise<
-  NotificationPermission | "unsupported"
-> {
-  if (!isNotificationSupported()) {
-    return "unsupported";
-  }
-
-  if (
-    Notification.permission === "granted" ||
-    Notification.permission === "denied"
-  ) {
-    return Notification.permission;
-  }
-
-  try {
-    return await Notification.requestPermission();
-  } catch {
-    return "denied";
-  }
-}
 
 export type TodoCreateInput = {
   text: string;
@@ -54,72 +32,9 @@ export type TodoPatch = Partial<
 export function useTasks() {
   const todos = useWorkspaceStore(selectTodos);
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
-  const timersRef = useRef<Map<string, number>>(new Map());
-  const triggeredIdsRef = useRef<Set<string>>(new Set());
 
-  const today = getTodayDate();
   const weekStart = getWeekStart();
   const weekEnd = getWeekEnd();
-
-  const clearTimer = useCallback((id: string) => {
-    const existing = timersRef.current.get(id);
-    if (existing !== undefined) {
-      window.clearTimeout(existing);
-      timersRef.current.delete(id);
-    }
-  }, []);
-
-  const clearAllTimers = useCallback(() => {
-    timersRef.current.forEach((timerId) => window.clearTimeout(timerId));
-    timersRef.current.clear();
-  }, []);
-
-  const fireNotification = useCallback(async (task: TodoItem) => {
-    if (triggeredIdsRef.current.has(task.id)) {
-      return;
-    }
-    triggeredIdsRef.current.add(task.id);
-
-    await dispatchTaskNotification(task);
-
-    setWorkspace((prev) => ({
-      ...prev,
-      todos: prev.todos.map((t) =>
-        t.id === task.id ? { ...t, reminderStatus: "triggered" } : t
-      ),
-    }));
-  }, [setWorkspace]);
-
-  const scheduleTimer = useCallback(
-    (task: TodoItem) => {
-      clearTimer(task.id);
-
-      if (!task.reminder || !task.dueDate || task.done || task.reminderStatus === "dismissed") {
-        return;
-      }
-
-      const timeStr = task.dueTime || "09:00";
-      const targetDate = new Date(`${task.dueDate}T${timeStr}:00`);
-      const offsetMs = (task.reminderOffset || 0) * 60 * 1000;
-      const targetTime = targetDate.getTime() - offsetMs;
-      const delay = targetTime - Date.now();
-
-      if (delay <= 0 && delay > -60000) {
-        void fireNotification(task);
-        return;
-      }
-
-      if (delay > 0 && delay <= 2147483647) {
-        const timerId = window.setTimeout(() => {
-          void fireNotification(task);
-          timersRef.current.delete(task.id);
-        }, delay);
-
-        timersRef.current.set(task.id, timerId);
-      }
-    },
-    [clearTimer, fireNotification],
-  );
 
   const add = useCallback(
     (input: TodoCreateInput) => {
@@ -144,12 +59,8 @@ export function useTasks() {
         ...prev,
         todos: [...prev.todos, todo],
       }));
-
-      if (todo.reminder) {
-        scheduleTimer(todo);
-      }
     },
-    [setWorkspace, scheduleTimer],
+    [setWorkspace],
   );
 
   const update = useCallback(
@@ -166,10 +77,6 @@ export function useTasks() {
         Boolean(patch.dueTime && patch.dueTime !== current.dueTime) ||
         Boolean(patch.reminderOffset !== undefined && patch.reminderOffset !== current.reminderOffset);
 
-      if (resetTrigger) {
-        triggeredIdsRef.current.delete(id);
-      }
-
       const updated: TodoItem = {
         ...current,
         ...patch,
@@ -181,14 +88,8 @@ export function useTasks() {
         ...prev,
         todos: prev.todos.map((t) => (t.id === id ? updated : t)),
       }));
-
-      if (updated.done || !updated.reminder) {
-        clearTimer(id);
-      } else {
-        scheduleTimer(updated);
-      }
     },
-    [setWorkspace, clearTimer, scheduleTimer],
+    [setWorkspace],
   );
 
   const toggle = useCallback(
@@ -198,37 +99,26 @@ export function useTasks() {
         todos: prev.todos.map((t) => {
           if (t.id !== id) return t;
           const nextDone = !t.done;
-          const next: TodoItem = {
+          return {
             ...t,
             done: nextDone,
             reminderStatus: nextDone ? "dismissed" : t.reminder ? "pending" : undefined,
             date: getTodayDate(),
           };
-
-          if (next.done) {
-            clearTimer(id);
-          } else if (next.reminder) {
-            triggeredIdsRef.current.delete(id);
-            scheduleTimer(next);
-          }
-
-          return next;
         }),
       }));
     },
-    [setWorkspace, clearTimer, scheduleTimer],
+    [setWorkspace],
   );
 
   const remove = useCallback(
     (id: string) => {
-      clearTimer(id);
-      triggeredIdsRef.current.delete(id);
       setWorkspace((prev) => ({
         ...prev,
         todos: prev.todos.filter((t) => t.id !== id),
       }));
     },
-    [setWorkspace, clearTimer],
+    [setWorkspace],
   );
 
   const moveToNextWeek = useCallback(
@@ -266,7 +156,6 @@ export function useTasks() {
     [setWorkspace],
   );
 
-  // Split tasks by calendar week bounds
   const { thisWeek, nextWeek } = useMemo(() => {
     const thisList: TodoItem[] = [];
     const nextList: TodoItem[] = [];
@@ -288,7 +177,6 @@ export function useTasks() {
     };
   }, [todos, weekEnd]);
 
-  // Clean rollover: incomplete tasks from prior to this week roll forward to TODAY
   useEffect(() => {
     let needsRollover = false;
     const currentToday = getTodayDate();
@@ -312,33 +200,8 @@ export function useTasks() {
         ...prev,
         todos: rolled,
       }));
-      return;
     }
-
-    todos.forEach((todo) => {
-      if (todo.reminder && !todo.done) {
-        scheduleTimer(todo);
-      }
-    });
-
-    const interval = window.setInterval(() => {
-      todos.forEach((todo) => {
-        if (todo.reminder && !todo.done && todo.dueDate && todo.reminderStatus !== "dismissed") {
-          const offsetMs = (todo.reminderOffset || 0) * 60 * 1000;
-          const target = new Date(`${todo.dueDate}T${todo.dueTime || "09:00"}`).getTime() - offsetMs;
-          const diff = target - Date.now();
-          if (diff <= 0 && diff > -120000 && !triggeredIdsRef.current.has(todo.id)) {
-            void fireNotification(todo);
-          }
-        }
-      });
-    }, 20000);
-
-    return () => {
-      window.clearInterval(interval);
-      clearAllTimers();
-    };
-  }, [todos, setWorkspace, scheduleTimer, clearAllTimers, fireNotification, weekStart]);
+  }, [todos, setWorkspace, weekStart]);
 
   return {
     thisWeek,

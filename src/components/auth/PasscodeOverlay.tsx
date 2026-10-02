@@ -7,7 +7,7 @@ export function PasscodeOverlay() {
   const isLocked = useSecurityStore((s) => s.isLocked);
   const unlock = useSecurityStore((s) => s.unlock);
   const lock = useSecurityStore((s) => s.lock);
-  const passcode = useSecurityStore((s) => s.passcode);
+  const passcodeHash = useSecurityStore((s) => s.passcodeHash);
   const timeoutDuration = useSecurityStore((s) => s.timeoutDuration);
   const lockOnTabSwitch = useSecurityStore((s) => s.lockOnTabSwitch);
   const lockoutUntil = useSecurityStore((s) => s.lockoutUntil);
@@ -16,41 +16,28 @@ export function PasscodeOverlay() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [rateLimitSeconds, setRateLimitSeconds] = useState(0);
 
-  // Rate-limit timer countdown
   useEffect(() => {
     if (!lockoutUntil) {
       setRateLimitSeconds(0);
       return;
     }
-
     const updateCountdown = () => {
       const remaining = Math.max(0, Math.ceil((lockoutUntil - Date.now()) / 1000));
       setRateLimitSeconds(remaining);
-      if (remaining === 0) {
-        setErrorMsg(null);
-      }
+      if (remaining === 0) setErrorMsg(null);
     };
-
     updateCountdown();
     const interval = setInterval(updateCountdown, 1000);
     return () => clearInterval(interval);
   }, [lockoutUntil]);
 
-  // Background inactivity and visibility listeners
   useEffect(() => {
-    if (!passcode) return;
-
+    if (!passcodeHash) return;
     let lastActive = Date.now();
-    const updateActivity = () => {
-      lastActive = Date.now();
-    };
-
+    const updateActivity = () => { lastActive = Date.now(); };
     const handleVisibility = () => {
-      if (document.hidden && lockOnTabSwitch) {
-        lock();
-      } else {
-        updateActivity();
-      }
+      if (document.hidden && lockOnTabSwitch) lock();
+      else updateActivity();
     };
 
     const checkLock = setInterval(() => {
@@ -69,15 +56,15 @@ export function PasscodeOverlay() {
       window.removeEventListener("keydown", updateActivity);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [passcode, timeoutDuration, isLocked, lockOnTabSwitch, lock]);
+  }, [passcodeHash, timeoutDuration, isLocked, lockOnTabSwitch, lock]);
 
   if (!isLocked) return null;
 
-  const handleUnlock = (e: React.FormEvent) => {
+  const handleUnlock = async (e: React.FormEvent) => {
     e.preventDefault();
     if (rateLimitSeconds > 0) return;
 
-    const res = unlock(input);
+    const res = await unlock(input);
     if (res.success) {
       setInput("");
       setErrorMsg(null);
@@ -95,7 +82,6 @@ export function PasscodeOverlay() {
       <div className="w-14 h-14 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mb-4 shadow-sm border border-primary/20">
         <Lock className="w-7 h-7" strokeWidth={2.25} />
       </div>
-
       <h2 className="text-xl font-bold tracking-tight mb-1 text-center">Workspace Locked</h2>
       <p className="text-xs text-muted-foreground mb-6 text-center max-w-xs">
         Enter your passcode to resume your active session.
@@ -124,7 +110,6 @@ export function PasscodeOverlay() {
             <span>{errorMsg}</span>
           </div>
         )}
-
         {rateLimitSeconds > 0 && (
           <div className="flex items-center justify-center gap-1.5 text-amber-500 text-xs font-medium">
             <ShieldAlert className="w-3.5 h-3.5" />
@@ -132,11 +117,7 @@ export function PasscodeOverlay() {
           </div>
         )}
 
-        <Button
-          type="submit"
-          disabled={rateLimitSeconds > 0 || !input.trim()}
-          className="w-full font-bold h-10 rounded-xl mt-1 cursor-pointer"
-        >
+        <Button type="submit" disabled={rateLimitSeconds > 0 || !input.trim()} className="w-full font-bold h-10 rounded-xl mt-1 cursor-pointer">
           Unlock Session
         </Button>
       </form>

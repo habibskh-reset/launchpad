@@ -9,7 +9,7 @@ import { ShieldCheck, ShieldAlert, Lock, KeyRound } from "lucide-react";
 
 export function SecuritySettings() {
   const {
-    passcode,
+    passcodeHash,
     setPasscode,
     changePasscode,
     removePasscode,
@@ -29,22 +29,22 @@ export function SecuritySettings() {
   const [isRemoving, setIsRemoving] = useState(false);
   const [removeVerifyCode, setRemoveVerifyCode] = useState("");
 
-  const handleCreate = (e: React.FormEvent) => {
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newCode.trim().length >= 4) {
-      setPasscode(newCode.trim());
+      await setPasscode(newCode.trim());
       setNewCode("");
     }
   };
 
-  const handleChange = (e: React.FormEvent) => {
+  const handleChange = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg("");
     if (nextCode.trim().length < 4) {
       setErrorMsg("New passcode must be at least 4 digits.");
       return;
     }
-    const success = changePasscode(currentCode, nextCode.trim());
+    const success = await changePasscode(currentCode, nextCode.trim());
     if (success) {
       setIsChanging(false);
       setCurrentCode("");
@@ -54,10 +54,10 @@ export function SecuritySettings() {
     }
   };
 
-  const handleRemove = (e: React.FormEvent) => {
+  const handleRemove = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg("");
-    const success = removePasscode(removeVerifyCode);
+    const success = await removePasscode(removeVerifyCode);
     if (success) {
       setIsRemoving(false);
       setRemoveVerifyCode("");
@@ -70,7 +70,7 @@ export function SecuritySettings() {
     <Card className="p-5 space-y-4">
       <div className="flex items-center justify-between border-b border-border/50 pb-3">
         <div className="flex items-center gap-2">
-          {passcode ? (
+          {passcodeHash ? (
             <ShieldCheck className="h-5 w-5 text-emerald-500" />
           ) : (
             <ShieldAlert className="h-5 w-5 text-muted-foreground" />
@@ -83,20 +83,15 @@ export function SecuritySettings() {
           </div>
         </div>
 
-        {passcode && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={lock}
-            className="rounded-xl font-bold text-xs gap-1.5 cursor-pointer h-8"
-          >
+        {passcodeHash && (
+          <Button size="sm" variant="outline" onClick={lock} className="rounded-xl font-bold text-xs gap-1.5 cursor-pointer h-8">
             <Lock className="h-3.5 w-3.5" />
             <span>Lock Now</span>
           </Button>
         )}
       </div>
 
-      {!passcode ? (
+      {!passcodeHash ? (
         <form onSubmit={handleCreate} className="space-y-4 pt-1">
           <p className="text-xs text-muted-foreground">
             Set a 4 to 8-digit passcode and select when your workspace should automatically lock.
@@ -116,7 +111,6 @@ export function SecuritySettings() {
                 className="font-mono tracking-widest text-sm rounded-xl h-9"
               />
             </div>
-
             <div>
               <Label className="text-[10px] font-bold uppercase text-muted-foreground mb-1 block">
                 Auto-Lock Timeout
@@ -135,107 +129,52 @@ export function SecuritySettings() {
             </div>
           </div>
 
-          <Button
-            type="submit"
-            disabled={newCode.trim().length < 4}
-            className="rounded-xl font-bold text-xs cursor-pointer h-9 px-4"
-          >
+          <Button type="submit" disabled={newCode.trim().length < 4} className="rounded-xl font-bold text-xs cursor-pointer h-9 px-4">
             Enable Passcode & Timeout
           </Button>
         </form>
       ) : (
         <div className="space-y-4 pt-1">
-          {/* Active status bar */}
           <div className="flex items-center justify-between bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/20 text-xs">
-            <span className="font-bold text-emerald-600 dark:text-emerald-400">
-              Passcode lock is active
-            </span>
+            <span className="font-bold text-emerald-600 dark:text-emerald-400">Passcode lock is active</span>
             <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setIsChanging((v) => !v);
-                  setIsRemoving(false);
-                  setErrorMsg("");
-                }}
-                className="h-7 text-xs rounded-lg cursor-pointer"
-              >
+              <Button variant="outline" size="sm" onClick={() => { setIsChanging((v) => !v); setIsRemoving(false); setErrorMsg(""); }} className="h-7 text-xs rounded-lg cursor-pointer">
                 Change Code
               </Button>
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => {
-                  setIsRemoving((v) => !v);
-                  setIsChanging(false);
-                  setErrorMsg("");
-                }}
-                className="h-7 text-xs rounded-lg cursor-pointer"
-              >
+              <Button variant="destructive" size="sm" onClick={() => { setIsRemoving((v) => !v); setIsChanging(false); setErrorMsg(""); }} className="h-7 text-xs rounded-lg cursor-pointer">
                 Remove
               </Button>
             </div>
           </div>
 
-          {/* Change Passcode inline panel */}
           {isChanging && (
             <form onSubmit={handleChange} className="p-3 bg-muted/40 rounded-xl border border-border space-y-2 text-xs">
               <div className="font-semibold text-foreground flex items-center gap-1.5">
-                <KeyRound className="w-3.5 h-3.5 text-primary" />
-                Change Passcode
+                <KeyRound className="w-3.5 h-3.5 text-primary" /> Change Passcode
               </div>
               <div className="flex flex-wrap gap-2">
-                <Input
-                  type="password"
-                  placeholder="Current code"
-                  value={currentCode}
-                  onChange={(e) => setCurrentCode(e.target.value)}
-                  className="w-36 h-8 text-xs font-mono"
-                  autoFocus
-                />
-                <Input
-                  type="password"
-                  placeholder="New code (4+ digits)"
-                  value={nextCode}
-                  onChange={(e) => setNextCode(e.target.value)}
-                  className="w-36 h-8 text-xs font-mono"
-                />
-                <Button type="submit" size="sm" className="h-8 text-xs rounded-lg font-bold">
-                  Save
-                </Button>
+                <Input type="password" placeholder="Current code" value={currentCode} onChange={(e) => setCurrentCode(e.target.value)} className="w-36 h-8 text-xs font-mono" autoFocus />
+                <Input type="password" placeholder="New code (4+ digits)" value={nextCode} onChange={(e) => setNextCode(e.target.value)} className="w-36 h-8 text-xs font-mono" />
+                <Button type="submit" size="sm" className="h-8 text-xs rounded-lg font-bold">Save</Button>
               </div>
               {errorMsg && <p className="text-[11px] text-destructive font-semibold">{errorMsg}</p>}
             </form>
           )}
 
-          {/* Remove Passcode inline panel */}
           {isRemoving && (
             <form onSubmit={handleRemove} className="p-3 bg-destructive/5 rounded-xl border border-destructive/20 space-y-2 text-xs">
               <div className="font-semibold text-destructive">Confirm Passcode Removal</div>
               <div className="flex flex-wrap gap-2">
-                <Input
-                  type="password"
-                  placeholder="Verify passcode"
-                  value={removeVerifyCode}
-                  onChange={(e) => setRemoveVerifyCode(e.target.value)}
-                  className="w-40 h-8 text-xs font-mono"
-                  autoFocus
-                />
-                <Button type="submit" variant="destructive" size="sm" className="h-8 text-xs rounded-lg font-bold">
-                  Confirm Remove
-                </Button>
+                <Input type="password" placeholder="Verify passcode" value={removeVerifyCode} onChange={(e) => setRemoveVerifyCode(e.target.value)} className="w-40 h-8 text-xs font-mono" autoFocus />
+                <Button type="submit" variant="destructive" size="sm" className="h-8 text-xs rounded-lg font-bold">Confirm Remove</Button>
               </div>
               {errorMsg && <p className="text-[11px] text-destructive font-semibold">{errorMsg}</p>}
             </form>
           )}
 
-          {/* Controls: Timeout & Tab Switch */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1 border-t border-border/40">
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-muted-foreground uppercase">
-                Auto-Lock Inactivity Timeout
-              </label>
+              <label className="text-[10px] font-bold text-muted-foreground uppercase">Auto-Lock Inactivity Timeout</label>
               <select
                 value={timeoutDuration}
                 onChange={(e) => setTimeoutDuration(Number(e.target.value) as TimeoutDuration)}
@@ -248,13 +187,8 @@ export function SecuritySettings() {
                 <option value={0}>Never Auto-Lock</option>
               </select>
             </div>
-
             <div className="flex items-center gap-2.5 sm:mt-5">
-              <Checkbox
-                id="tabSwitch"
-                checked={lockOnTabSwitch}
-                onCheckedChange={(c) => setLockOnTabSwitch(Boolean(c))}
-              />
+              <Checkbox id="tabSwitch" checked={lockOnTabSwitch} onCheckedChange={(c) => setLockOnTabSwitch(Boolean(c))} />
               <Label htmlFor="tabSwitch" className="text-xs cursor-pointer font-medium leading-tight">
                 Lock immediately when switching browser tabs or minimizing
               </Label>

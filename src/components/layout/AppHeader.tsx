@@ -33,7 +33,9 @@ import {
 export function AppHeader() {
   const user = useWorkspaceStore((s) => s.user);
   const title = useWorkspaceStore((s) => s.workspace.settings.title);
-  const passcode = useSecurityStore((s) => s.passcode);
+  
+  // FIXED: Fetch passcodeHash instead of the removed passcode property
+  const passcodeHash = useSecurityStore((s) => s.passcodeHash);
   const lock = useSecurityStore((s) => s.lock);
 
   const { logout } = useAuth();
@@ -156,7 +158,8 @@ export function AppHeader() {
                 </DropdownMenuLabel>
               )}
 
-              {passcode && (
+              {/* FIXED: Check passcodeHash instead of passcode */}
+              {passcodeHash && (
                 <DropdownMenuItem onSelect={lock} className="cursor-pointer font-semibold text-primary">
                   <Lock className="h-3.5 w-3.5 mr-1" />
                   Lock Workspace
